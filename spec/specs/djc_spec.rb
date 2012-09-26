@@ -2,6 +2,79 @@ require 'spec_helper'
 
 describe DJC do
 
+  it "parses path tokens properly" do
+    simple = "token"
+    rule = DJC::Rule.new(simple)
+    rule.paths.length.should == 1
+    rule.paths.first.should == [ 'token' ]
+
+    complex = "token[0]{subtoken{subsub}.token_with_spaces and digits 123.1|alternate|/regex[1-3]/<ref>|#literal"
+    rule = DJC::Rule.new(complex)
+    rule.paths.length.should == 4
+    rule.paths[0].should == [ 'token', '0', 'subtoken', 'subsub', 'token_with_spaces and digits 123', '1' ]
+    rule.paths[1].should == [ 'alternate' ]
+    rule.paths[2].should == [ '/regex[1-3]/', '<ref>' ]
+    rule.paths[3].should == [ '#literal' ]
+  end
+
+  it "properly builds columns when given a block with column rules" do
+    builder = DJC::Builder.build do |djc|
+      djc['simple']  = 'token'
+      djc['complex'] = 'token[subtoken]|alternate.altsubtoken'
+      djc['simple']  = 'duplicate names are valid'
+    end
+
+    builder.columns.length.should == 3
+
+    builder.columns[0].name.should == 'simple'
+    builder.columns[0].rule.type.should == 'lookup'
+    builder.columns[0].rule.paths[0].should == [ 'token' ]
+
+    builder.columns[1].name.should == 'complex'
+    builder.columns[1].rule.type.should == 'lookup'
+    builder.columns[1].rule.paths[0].should == [ 'token', 'subtoken' ]
+    builder.columns[1].rule.paths[1].should == [ 'alternate', 'altsubtoken' ]
+
+    builder.columns[2].name.should == 'simple'
+    builder.columns[2].rule.type.should == 'lookup'
+    builder.columns[2].rule.paths[0].should == [ 'duplicate names are valid' ]
+  end
+
+  it "properly builds columns when given a block with aggregate rules" do
+    builder = DJC::Builder.build do |djc|
+      djc['sum']  = sum('token.path')
+      djc['avg']  = avg('token.path')
+      djc['with'] = with('token.path.a', 'token.path.b') { |colname, vala, valb| }
+    end
+
+    builder.columns.length.should == 3
+
+    builder.columns[0].name.should == 'sum'
+    builder.columns[0].rule.type.should == 'sum'
+    builder.columns[0].rule.paths.length.should == 1
+    builder.columns[0].rule.paths.first.should == [ 'token', 'path' ]
+
+    builder.columns[1].name.should == 'avg'
+    builder.columns[1].rule.type.should == 'avg'
+    builder.columns[1].rule.paths.length.should == 1
+    builder.columns[1].rule.paths.first.should == [ 'token', 'path' ]
+
+    builder.columns[2].name.should == 'with'
+    builder.columns[2].rule.type.should == 'with'
+    builder.columns[2].rule.paths.length.should == 2
+
+    with_rule = builder.columns[2].rule
+
+    with_rule.paths[0].class.should == DJC::Rule
+    with_rule.paths[0].type.should == 'lookup'
+    with_rule.paths[0].paths.should == [[ 'token', 'path', 'a' ]]
+
+    with_rule.paths[0].class.should == DJC::Rule
+    with_rule.paths[1].type.should == 'lookup'
+    with_rule.paths[1].paths.should == [[ 'token', 'path', 'b' ]]
+  end
+
+
   it "understand djc conversion rules to convert one JSON object into CSV" do
 
     jsonstr = <<-JSON
@@ -31,15 +104,15 @@ describe DJC do
                 {
                    "nested4 key1" : [ 2, 20, 200, 200 ],
                    "nested4 key2" : {
-                                         "nested4_1 key1" : "nested4_1 value1",
-                                         "nested4_1 key2" : [ null, true, false, 3, "nested4_1 value2_4" ]
-                                      }
+                                      "nested4_1 key1" : "nested4_1 value1",
+                                      "nested4_1 key2" : [ null, true, false, 3, "nested4_1 value2_4" ]
+                                    }
                 }
               ]
 }
     JSON
 
-    csv = DJC.map(jsonstr) do |djc|
+    csv = DJC.build(jsonstr) do |djc|
       col = '@'
 
       def col.nxt
@@ -73,7 +146,7 @@ describe DJC do
 
       djc[col.nxt] = 'null|string'
 
-      djc[col.nxt] = build { |json| json['string'].reverse }
+      djc[col.nxt] = lambda { |json| json['string'].reverse }
       r = 0
       djc[col.nxt, col.nxt] = cols('array.1') do |cols, val|
         r = Random.rand(val)
