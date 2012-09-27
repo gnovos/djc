@@ -44,6 +44,27 @@ module DJC
             end
       path.empty? ? val : path.walk(val)
     end
+
+    def cross
+      crossed = [[]]
+
+      each do |obj|
+        if obj.is_a?(Array)
+          adding = []
+          obj.each_with_index do |item, index|
+            crossed.each do |cross|
+              row = cross.dup
+              row << item
+              adding << row
+            end
+          end
+          crossed = adding
+        else
+          crossed.each { |cross| cross << obj }
+        end
+      end
+      crossed.size == 1 ? crossed.first : crossed
+    end
   end
 
   class Rule
@@ -143,7 +164,7 @@ module DJC
     end
 
     def initialize(path = nil)
-      @path = Rule.new(path)
+      @path = Rule.new(path) if path
     end
 
     attr_reader :columns
@@ -199,14 +220,12 @@ module DJC
   class << self
 
     def build(json = nil, &block)
-#xxx    json = JSON.parse(json) if json.is_a?(String)
+      json = JSON.parse(json) if json.is_a?(String)
 
-      builder = Builder.new
-
-      block.call(builder)
+      builder = Builder.compile(&block)
 
       out = CSV.generate do |csv|
-        csv << builder.headers
+        csv << builder.header
         builder.build(json).each do |row|
           csv << row
         end

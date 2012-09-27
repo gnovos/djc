@@ -2,7 +2,15 @@ require 'spec_helper'
 
 describe DJC do
 
-  describe "Array" do
+  describe String do
+    it "can convery to literal using unary ~ operator" do
+      str = ~"str"
+      str.should == "#str"
+    end
+
+  end
+
+  describe Array do
     it "can walk an object tree" do
 
       expected = "expected"
@@ -25,6 +33,21 @@ describe DJC do
       ['walk7', '0,1,3'].walk(obj).should == [ 'walk8', 'walk9', 'walk0']
     end
 
+    it "can crossjoin subarrays to form a multidimensional array" do
+      uncrossed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].cross
+      uncrossed.should == [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+      crossed = [1, 2, [3, 4], 5, 6, [7, 8, 9], 0].cross
+      crossed.should == [
+          [1, 2, 3, 5, 6, 7, 0],
+          [1, 2, 4, 5, 6, 7, 0],
+
+          [1, 2, 3, 5, 6, 8, 0],
+          [1, 2, 4, 5, 6, 8, 0],
+
+          [1, 2, 3, 5, 6, 9, 0],
+          [1, 2, 4, 5, 6, 9, 0]
+      ]
+    end
   end
 
   describe DJC::Rule do
@@ -186,100 +209,102 @@ describe DJC do
 
   end
 
-#  it "understand djc conversion rules to convert one JSON object into CSV" do
-#
-#    jsonstr = <<-JSON
-#{
-#  "bool"    : true,
-#  "null"    : null,
-#  "string"  : "value",
-#  "number"  : 42,
-#  "array"   : [ "first array value", 814, null, "last array value" ],
-#  "nums"    : [ 5, 50, 500, 5000 ],
-#  "hash"    : {
-#                "hash key"      : "hash value",
-#                "null hash key" : null
-#              },
-#  "key"     : "key value",
-#  "key2"    : "key2 value",
-#  "other"   : "other value",
-#  "each"    : [ { "a": "first val a", "b": "first val b" }, { "a": "second val a", "b": "second val b" } ],
-#  "nested"  : [ "nested0",
-#                {
-#                  "nested1 key1" : "nested1 value1",
-#                  "nested1 key2" : "nested1 value2",
-#                  "nested1 key3" : "nested1 value3"
-#                },
-#                "nested2",
-#                [ 1, 10, 100, 1000 ],
-#                {
-#                   "nested4 key1" : [ 2, 20, 200, 200 ],
-#                   "nested4 key2" : {
-#                                      "nested4_1 key1" : "nested4_1 value1",
-#                                      "nested4_1 key2" : [ null, true, false, 3, "nested4_1 value2_4" ]
-#                                    }
-#                }
-#              ]
-#}
-#    JSON
-#
-#    csv = DJC.build(jsonstr) do |djc|
-#      col = '@'
-#
-#      def col.nxt
-#        self.next!.dup
-#      end
-#
-#      djc[col.nxt] = 'bool'
-#      djc[col.nxt] = 'null'
-#      djc[col.nxt] = 'number'
-#      djc[col.nxt] = 'string'
-#      djc[col.nxt] = 'array[3]'
-#      djc[col.nxt] = 'array{1}'
-#      djc[col.nxt] = 'array.0'
-#      djc[col.nxt] = 'hash{hash key}'
-#      djc[col.nxt] = 'hash[hash key]'
-#      djc[col.nxt] = 'hash.null hash key'
-#      djc[col.nxt] = 'nested[4]{nested3 key2}{nested3_1 key2}[3]'
-#
-#      djc[col.nxt] = with('number', 'array[1]').join
-#      djc[col.nxt] = with('string', 'number').join
-#      djc[col.nxt] = with('string', 'string').join
-#      djc[col.nxt] = with('string', 'number') { |s, n| "#{s}:#{n}" }
-#
-#      djc[col.nxt] = sum('nums')
-#      djc[col.nxt] = sum('nums[0,1,3]')
-#      djc[col.nxt] = with('nums[1-3]').join('|')
-#      djc[col.nxt] = sum('nums', 'nested[3][0]', 'nested[4]{nested3 key1}[0-2]')
-#
-#      djc[col.nxt] = avg('nums')
-#      djc[col.nxt] = avg('nums[0,1,3]')
-#
-#      djc[col.nxt] = 'null|string'
-#
-#      djc[col.nxt] = rule { |json| json['string'].reverse }
-#      djc[col.nxt] = '/other*/'
-#      djc[col.nxt] = with('/key[01]/').join(':')
-#
-#      djc[col.nxt] = 'nums<nested.3.0>'
-#
-#      djc[col.nxt] = '#literal'
-#
-#      djc[col.nxt] = with('nums[0,1]', 'array[1]', '#literal').join(':')
-#
-#      djc[col.nxt] = with('each') { |ech| "#{ech['a']}|#{ech['b']}" }.join(':')
-#
-#      djc['A']     = 'dupcolumn'
-#
-#    end
-#
-#    csv.should_not be_nil
-#    csv.should == <<-CSV
-##{ header, i = [], '@'; header << i.next!.dup until i >= col; header.join(',') },A
-#    CSV
-#
-#  end
-#
+  it "understand djc conversion rules to convert one JSON object into CSV" do
+
+    jsonstr = <<-JSON
+{
+  "bool"    : true,
+  "null"    : null,
+  "string"  : "value",
+  "number"  : 42,
+  "array"   : [ "first array value", 814, null, "last array value" ],
+  "nums"    : [ 5, 50, 500, 5000 ],
+  "hash"    : {
+                "hash key"      : "hash value",
+                "null hash key" : null
+              },
+  "key"     : "key value",
+  "key2"    : "key2 value",
+  "other"   : "other value",
+  "each"    : [ { "a": "first val a", "b": "first val b" }, { "a": "second val a", "b": "second val b" } ],
+  "nested"  : [ "nested0",
+                {
+                  "nested1 key1" : "nested1 value1",
+                  "nested1 key2" : "nested1 value2",
+                  "nested1 key3" : "nested1 value3"
+                },
+                "nested2",
+                [ 1, 10, 100, 1000 ],
+                {
+                   "nested4 key1" : [ 2, 20, 200, 200 ],
+                   "nested4 key2" : {
+                                      "nested4_1 key1" : "nested4_1 value1",
+                                      "nested4_1 key2" : [ null, true, false, 3, "nested4_1 value2_4" ]
+                                    }
+                }
+              ]
+}
+    JSON
+
+    $col = 0
+
+    csv = DJC.build(jsonstr) do |djc|
+
+      def nxt
+        $col = $col.next
+        "col#{$col}"
+      end
+
+      djc[nxt] = 'bool'
+      djc[nxt] = 'null'
+      djc[nxt] = 'number'
+      djc[nxt] = 'string'
+      djc[nxt] = 'array[3]'
+      djc[nxt] = 'array{1}'
+      djc[nxt] = 'array.0'
+      djc[nxt] = 'hash{hash key}'
+      djc[nxt] = 'hash[hash key]'
+      djc[nxt] = 'hash.null hash key'
+      djc[nxt] = 'nested[4]{nested3 key2}{nested3_1 key2}[3]'
+
+      djc[nxt] = with('number', 'array[1]').join
+      djc[nxt] = with('string', 'number').join
+      djc[nxt] = with('string', 'string').join
+      djc[nxt] = with('string', 'number') { |s, n| "#{s}:#{n}" }
+
+      djc[nxt] = sum('nums')
+      djc[nxt] = sum('nums[0,1,3]')
+      djc[nxt] = with('nums[1-3]').join('|')
+      djc[nxt] = sum('nums', 'nested[3][0]', 'nested[4]{nested3 key1}[0-2]')
+
+      djc[nxt] = avg('nums')
+      djc[nxt] = avg('nums[0,1,3]')
+
+      djc[nxt] = 'null|string'
+
+      djc[nxt] = rule { |json| json['string'].reverse }
+      djc[nxt] = '/other*/'
+      djc[nxt] = with('/key[01]/').join(':')
+
+      djc[nxt] = ~'literal'
+
+      djc[nxt] = with('nums[0,1]', 'array[1]', '#literal').join(':')
+
+      djc[nxt] = with('each') { |ech| "#{ech['a']}|#{ech['b']}" }.join(':')
+
+      djc['col0']     = ~'dupcolumn'
+
+    end
+
+    csv.should_not be_nil
+    puts csv
+    csv.should == <<-CSV
+col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16,col17,col18,col19,col20,col21,col22,col23,col24,col25,col26,col27,col28,col0
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,"[6, 50, 500, 5000]",1388.75,1685.0,value,eulav,other value,,literal,"[""5:814:literal"", ""50""]","{""a""=>""first val a"", ""b""=>""first val b""}:{""a""=>""second val a"", ""b""=>""second val b""}",dupcolumn
+    CSV
+
+  end
+
 #  it "can build a complete CSV from a JSON structure" do
 #
 #    employees = <<-JSON
