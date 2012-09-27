@@ -12,10 +12,6 @@ module DJC
 
   class ::Array
 
-    def valfor(obj)
-
-    end
-
     def walk(obj)
       path = self.dup
       key = path.shift.to_s
@@ -60,6 +56,28 @@ module DJC
 
       path.empty? ? val : path.walk(val)
     end
+
+    def collate
+      collated = [[]]
+      fill = {}
+      each_with_index do |obj, index|
+        if obj.is_a?(Array)
+          obj.each_with_index do |item, row|
+            collated[row] ||= []
+            collated[row][index] = item
+          end
+        end
+      end
+      collated.each do |row|
+        each_with_index do |obj, index|
+          unless obj.is_a?(Array)
+            row[index] = obj
+          end
+        end
+      end
+      collated.size == 1 ? collated.first : collated
+    end
+
 
     def cross
       crossed = [[]]
@@ -218,12 +236,14 @@ module DJC
       rows = []
       if json.is_a? Array
         json.each do |row|
-          rows << @columns.map do |column|
+          row = @columns.map do |column|
             column.rule.apply(row)
           end
+          p row
+          rows << row
         end
       else
-        rows = @columns.map do |column|
+        rows << @columns.map do |column|
           column.rule.apply(json)
         end
       end
@@ -241,15 +261,13 @@ module DJC
 
       out = CSV.generate do |csv|
         csv << builder.header
-        builder.build(json).cross.each do |row|
+        builder.build(json).each do |row|
+          p "row is #{row}"
           csv << row
         end
       end
       out
     end
-
   end
-
-
 
 end

@@ -57,6 +57,26 @@ describe DJC do
       ]
 
     end
+
+    it "can collate inner arrays" do
+      uncollated = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].collate
+      uncollated.should == [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+
+      single = [[1, 2, 3]].collate
+      single.should == [
+          [1], [2], [3]
+      ]
+
+      collated = [1, 2, [3, 4], 5, 6, [7, 8, 9], 0].collate
+      collated.should == [
+          [1, 2, 3, 5, 6, 7, 0],
+          [1, 2, 4, 5, 6, 8, 0],
+
+          [1, 2, nil, 5, 6, 9, 0]
+      ]
+
+    end
+
   end
 
   describe DJC::Rule do
@@ -331,35 +351,38 @@ true,,42,value,last array value,814,first array value,hash value,hash value,,,42
   it "can build a complete CSV from a JSON structure" do
 
     json = <<-JSON
-{
-  "company": "Company, Inc",
-  "employees": [
-    {"id":1,"name":{"first":"Joe","last":"Schmoe"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
-    {"id":2,"name":{"first":"Jane","last":"Jabang"},    "jobtitle":"Internal Affairs Chief","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1},
-    {"id":3,"name":{"first":"Mebook","last":"Garblong"},"jobtitle":"Alien Visitor Hospitality Officer","address":"123 fake street","date joined":"2001-04-10","boss":1}
-  ],
-  "rooms": [
-    {"id":1,"name":"Big Meeting Room"},
-    {"id":2,"name":"Small Meeting Room"}
-  ],
-  "reserved": [
-    { "room":1, "invited": [1, 3],    "time":"15:45", "date":"2012-09-04"},
-    { "room":1, "invited": [1, 2, 3], "time":"17:45", "date":"2012-09-04"},
-    { "room":2, "invited": [2, 3],    "time":"9:45",  "date":"2012-09-05"}
-  ]
-}
+[
+  {"company": "Company Inc",
+   "employees": [
+     {"id":1,"name":{"first":"Joe","last":"Schmoe"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
+     {"id":2,"name":{"first":"Jane","last":"Jabang"},    "jobtitle":"Internal Affairs Chief","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1},
+     {"id":3,"name":{"first":"Mebook","last":"Garblong"},"jobtitle":"Alien Visitor Hospitality Officer","address":"123 fake street","date joined":"2001-04-10","boss":1}
+  ]},
+  {"company": "Other Company DotCom",
+   "employees": [
+     {"id":11,"name":{"first":"Dame","last":"Edna"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
+     {"id":21,"name":{"first":"Senor","last":"Whoozit"}, "jobtitle":"Senior Engineer","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1}
+  ]}
+]
     JSON
 
     csv = DJC.build(json) do |djc|
-      djc['name']  = 'employees.*.name.first'
+      djc['company']   = 'company'
+      djc['full name'] = with('employees.*.name.first', 'employees.*.name.last').join(' ')
+      djc['title']     = 'employees.*.jobtitle'
     end
+
+    puts csv
+
 
     csv.should_not be_nil
     csv.should == <<-CSV
-name
-Joe
-Jane
-Mebook
+company,full name,title
+Company Inc,Joe Schmoe,CEO
+Company Inc,Jane Jabang,Internal Affairs Chief
+Company Inc,Mebook Garblong,Alien Visitor Hospitality Officer
+Other Company DotCom,Dame Edna,CEO
+Other Company DotCom,Senor Whoozit,Senior Engineer
     CSV
 
   end
