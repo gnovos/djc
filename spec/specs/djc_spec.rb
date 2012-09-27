@@ -116,6 +116,7 @@ describe DJC do
     it "parses JSON via rules" do
 
       json = JSON.parse <<-JSON
+{ "rows" :
 [
   {
     "row"  : 1,
@@ -143,11 +144,12 @@ describe DJC do
     }
   }
 ]
+}
       JSON
 
       #xxx still need rows()
 
-      builder = DJC::Builder.compile do |djc|
+      builder = DJC::Builder.compile("rows") do |djc|
         djc['id']        = 'row'
         djc['sums']      = sum('data.sum')
         djc['avgs']      = avg('data.avg')

@@ -6,11 +6,10 @@ module DJC
   class ::Array
     def walk(obj)
       path = self.dup
-      key = path.shift
+      key = path.shift.to_s
       val = if obj.is_a? Array
-              obj[key.to_i]
+             obj[key.to_i] if key.match(/^\d+$/)
             elsif obj.is_a? Hash
-              key = key.to_s
               match = key[/\/(.*)\//, 1]
               if match.nil?
                 obj[key]
@@ -75,6 +74,7 @@ module DJC
         while value.nil? && path = walker.shift
           value = path.walk(obj)
         end
+        value
       else
         if paths.nil? || paths.empty?
           value = block.call(obj)
@@ -113,10 +113,14 @@ module DJC
   end
 
   class Builder
-    def self.compile(&block)
-      builder = Builder.new
+    def self.compile(path=nil, &block)
+      builder = Builder.new(path)
       builder.instance_eval &block
       builder
+    end
+
+    def initialize(path = nil)
+      @path = Rule.new(path)
     end
 
     attr_reader :columns
@@ -150,6 +154,7 @@ module DJC
     end
 
     def build(json)
+      json = @path.apply(json) if @path
       rows = []
       if json.is_a? Array
         json.each do |row|
@@ -157,6 +162,10 @@ module DJC
           rows << @columns.map do |column|
             column.rule.apply(row)
           end
+        end
+      else
+        rows << @columns.map do |column|
+          column.rule.apply(json)
         end
       end
       rows
