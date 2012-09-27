@@ -43,13 +43,18 @@ module DJC
       self
     end
 
+    def each(&each_block)
+      @type, @block = 'each', proc { |array| array.map { |val| each_block.call(val) } }
+      self
+    end
+
     def join(sep = '')
-      @type, @block = 'join', proc { |vals| vals.compact.join(sep) }
+      @type, @block = 'join', proc { |vals| vals.is_a?(Array) ? vals.compact.join(sep) : vals }
       self
     end
 
     def match(matcher)
-      @type, @matcher = 'match', matcher
+      @type, @block = 'match', proc { |val| val.scan(matcher).flatten }
       self
     end
 
@@ -62,7 +67,9 @@ module DJC
           value = path.walk(obj)
         end
       else
-        if paths.length > 1
+        if paths.nil? || paths.empty?
+          value = block.call(obj)
+        elsif paths.length > 1
           value = [[]]
           paths.each_with_index do |rule, index|
             val = rule.apply(obj)
@@ -118,6 +125,10 @@ module DJC
 
     def avg(*paths)
       with(*paths).avg
+    end
+
+    def each(*paths, &block)
+      with(*paths).each(&block)
     end
 
     def with(*paths, &block)

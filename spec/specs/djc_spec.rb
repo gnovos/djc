@@ -143,22 +143,29 @@ describe DJC do
       JSON
 
       builder = DJC::Builder.compile do |djc|
-        djc['id']   = "row"
-        djc['sums'] = sum('data.sum')
-        djc['avgs'] = avg('data.avg')
-        djc['yes']  = "data.nil|data.yes"
-        djc['join'] = with('data.stra', 'data.strb').join(':')
+        djc['id']        = "row"
+        djc['sums']      = sum('data.sum')
+        djc['avgs']      = avg('data.avg')
+        djc['yes']       = "data.nil|data.yes|data.stra"
+        djc['join']      = with('data.stra', 'data.strb').join(':')
         djc['crossjoin'] = with('data.stra', 'data.sum', 'data.strb').join(':')
-        djc['crosssum'] = with('data.sum', 'data.sum', 'data.sum').sum
+        djc['crosssum']  = with('data.sum', 'data.sum', 'data.sum').sum
+        djc['with']      = with('data.stra') { |a| a.reverse }
+        djc['multiwith'] = with('data.stra', 'data.strb') { |a, b| "#{b.reverse}#{a}" }
+        djc['each']      = each('data.sum') { |sum| sum + 1 }
+        djc['match']     = with('data.stra').match(/.[ai]/)
+        djc['capture']   = with('data.stra').match(/(.)[ai]/)
+        djc['rule']      = rule { |json| "#{json['row']}:#{json.size}" }
+
       end
 
-      builder.header.should == [ 'id', 'sums', 'avgs', 'yes', 'join', 'crossjoin', 'crosssum' ]
+      builder.header.should == %w(id sums avgs yes join crossjoin crosssum with multiwith each match capture rule)
 
       rows = builder.build(json)
 
       rows.length.should == 2
-      rows[0].should == [1, 1111, 5.0,  true, 'stringa:stringb', ["stringa:1:stringb", "10", "100", "1000"], [3, 30, 300, 3000] ]
-      rows[1].should == [2, 2222, 10.0, true, 'stringa:stringb', ["stringa:2:stringb", "20", "200", "2000"], [6, 60, 600, 6000] ]
+      rows[0].should == [1, 1111, 5.0,  true, 'stringa:stringb', ["stringa:1:stringb", "10", "100", "1000"], [3, 30, 300, 3000], 'agnirts', 'bgnirtsstringa', [2, 11, 101, 1001], ['ri', 'ga'], ['r', 'g'], '1:2' ]
+      rows[1].should == [2, 2222, 10.0, true, 'stringa:stringb', ["stringa:2:stringb", "20", "200", "2000"], [6, 60, 600, 6000], 'agnirts', 'bgnirtsstringa', [3, 21, 201, 2001], ['ri', 'ga'], ['r', 'g'], '2:2' ]
 
     end
 
