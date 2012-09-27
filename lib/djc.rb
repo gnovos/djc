@@ -14,14 +14,18 @@ module DJC
       path = self.dup
       key = path.shift.to_s
       val = if obj.is_a? Array
-              match = /(\d+)(?:-|\.\.\.?)(\d+)/.match(key)
+              match = /^[\d,-]+$/.match(key)
               if match
-                range = match.captures
-                obj[range.first.to_i..range.last.to_i]
-              elsif key.match(/^(?:\d+,)+\d+$/)
-                obj.values_at(*key.scan(/\d+/).map(&:to_i))
-              elsif key.match(/^\d+$/)
-                obj[key.to_i]
+                selected = key.split(',').map do |dex|
+                  range = /(\d+)(?:-|\.\.\.?)(\d+)/.match(dex)
+                  if range
+                    range = range.captures
+                    obj[range.first.to_i..range.last.to_i]
+                  else
+                    obj[dex.to_i]
+                  end
+                end.flatten
+                selected.size == 1 ? selected.first : selected
               end
             elsif obj.is_a? Hash
               match = key[/\/(.*)\//, 1]
