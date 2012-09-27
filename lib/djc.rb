@@ -4,9 +4,10 @@ require 'csv'
 module DJC
 
   class ::String
-    def ~
+    def ~@
       "##{self}"
     end
+
   end
 
   class ::Array
