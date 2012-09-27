@@ -11,12 +11,27 @@ module DJC
   end
 
   class ::Array
+
+    def valfor(obj)
+
+    end
+
     def walk(obj)
       path = self.dup
       key = path.shift.to_s
+
       val = if obj.is_a? Array
-              match = /^[\d,-]+$/.match(key)
-              if match
+              if key == '*'
+                if path.empty?
+                  obj
+                else
+                  sub = obj.map do |inner|
+                    path.dup.walk(inner)
+                  end
+                  path.clear
+                  sub
+                end
+              elsif /^[\d,-]+$/.match(key)
                 selected = key.split(',').map do |dex|
                   range = /(\d+)(?:-|\.\.\.?)(\d+)/.match(dex)
                   if range
@@ -42,6 +57,7 @@ module DJC
             elsif obj.respond_to? key
               obj.send(key)
             end
+
       path.empty? ? val : path.walk(val)
     end
 
@@ -86,17 +102,17 @@ module DJC
     end
 
     def sum
-      @type, @block = 'sum', proc { |array| array.map(&:to_i).inject(0, :+) }
+      @type, @block = 'sum', proc { |array| array.map(&:to_i).inject(0, :+) if array }
       self
     end
 
     def avg
-      @type, @block = 'avg', proc { |array| array.map(&:to_i).inject(0.0, :+) / array.size }
+      @type, @block = 'avg', proc { |array| ( array.map(&:to_i).inject(0.0, :+) / array.size) if array }
       self
     end
 
     def each(&each_block)
-      @type, @block = 'each', proc { |array| array.map { |val| each_block.call(val) } }
+      @type, @block = 'each', proc { |array| array.map { |val| each_block.call(val) } if array }
       self
     end
 
@@ -202,13 +218,12 @@ module DJC
       rows = []
       if json.is_a? Array
         json.each do |row|
-          #xxx ensmartern for arrayed vals, x-by-x
           rows << @columns.map do |column|
             column.rule.apply(row)
           end
         end
       else
-        rows << @columns.map do |column|
+        rows = @columns.map do |column|
           column.rule.apply(json)
         end
       end
@@ -226,7 +241,7 @@ module DJC
 
       out = CSV.generate do |csv|
         csv << builder.header
-        builder.build(json).each do |row|
+        builder.build(json).cross.each do |row|
           csv << row
         end
       end

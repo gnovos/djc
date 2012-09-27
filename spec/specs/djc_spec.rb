@@ -31,11 +31,14 @@ describe DJC do
       ['walk5', 'walk6'].walk(obj).should == 'expected2'
       ['walk7', '0-1'].walk(obj).should == [ 'walk8', 'walk9']
       ['walk7', '0,1,3'].walk(obj).should == [ 'walk8', 'walk9', 'walk0']
+      ['walk7', '*'].walk(obj).should == [ 'walk8', 'walk9', 'foo', 'walk0' ]
+
     end
 
     it "can crossjoin subarrays to form a multidimensional array" do
       uncrossed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].cross
       uncrossed.should == [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]
+
       crossed = [1, 2, [3, 4], 5, 6, [7, 8, 9], 0].cross
       crossed.should == [
           [1, 2, 3, 5, 6, 7, 0],
@@ -47,6 +50,12 @@ describe DJC do
           [1, 2, 3, 5, 6, 9, 0],
           [1, 2, 4, 5, 6, 9, 0]
       ]
+
+      single = [[1, 2, 3]].cross
+      single.should == [
+          [1], [2], [3]
+      ]
+
     end
   end
 
@@ -275,7 +284,7 @@ describe DJC do
       djc[nxt] = sum('nums')
       djc[nxt] = sum('nums[0,1,3]')
       djc[nxt] = with('nums[1-3]').join('|')
-      djc[nxt] = sum('nums', 'nested[3][0]', 'nested[4]{nested3 key1}[0-2]')
+      djc[nxt] = sum('nums', 'nested[3][0]', 'nested[4]{nested3 key1}[0-2]') #brokwn
 
       djc[nxt] = avg('nums')
       djc[nxt] = avg('nums[0,1,3]')
@@ -288,87 +297,71 @@ describe DJC do
 
       djc[nxt] = ~'literal'
 
-      djc[nxt] = with('nums[0,1]', 'array[1]', '#literal').join(':')
+      djc[nxt] = with('nums[0,1]', 'array[1]', '#literal').join(':') #brokwn
 
-      djc[nxt] = with('each') { |ech| "#{ech['a']}|#{ech['b']}" }.join(':')
+      djc[nxt] = with('each.*.a','each.*.b').join(':') #brokn
 
       djc['col0']     = ~'dupcolumn'
 
     end
 
     csv.should_not be_nil
-    puts csv
     csv.should == <<-CSV
 col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16,col17,col18,col19,col20,col21,col22,col23,col24,col25,col26,col27,col28,col0
-true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,"[6, 50, 500, 5000]",1388.75,1685.0,value,eulav,other value,,literal,"[""5:814:literal"", ""50""]","{""a""=>""first val a"", ""b""=>""first val b""}:{""a""=>""second val a"", ""b""=>""second val b""}",dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,6,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,50,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,500,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,5000,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,6,1388.75,1685.0,value,eulav,other value,,literal,50,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,50,1388.75,1685.0,value,eulav,other value,,literal,50,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,500,1388.75,1685.0,value,eulav,other value,,literal,50,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,5000,1388.75,1685.0,value,eulav,other value,,literal,50,first val a:first val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,6,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,50,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,500,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,5000,1388.75,1685.0,value,eulav,other value,,literal,5:814:literal,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,6,1388.75,1685.0,value,eulav,other value,,literal,50,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,50,1388.75,1685.0,value,eulav,other value,,literal,50,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,500,1388.75,1685.0,value,eulav,other value,,literal,50,second val a:second val b,dupcolumn
+true,,42,value,last array value,814,first array value,hash value,hash value,,,42814,value42,valuevalue,value:42,5555,5055,50|500|5000,5000,1388.75,1685.0,value,eulav,other value,,literal,50,second val a:second val b,dupcolumn
     CSV
 
   end
 
-#  it "can build a complete CSV from a JSON structure" do
-#
-#    employees = <<-JSON
-#{
-#  "company": "Company, Inc",
-#  "employees": [
-#    {"id":1,"name":{"first":"Joe","last":"Schmoe"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
-#    {"id":2,"name":{"first":"Jane","last":"Jabang"},    "jobtitle":"Internal Affairs Chief","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1},
-#    {"id":3,"name":{"first":"Mebook","last":"Garblong"},"jobtitle":"Alien Visitor Hospitality Officer","address":"123 fake street","date joined":"2001-04-10","boss":1}
-#  ]
-#}
-#    JSON
-#
-#    meetings = <<-JSON
-#{
-#  "rooms": [
-#    {"id":1,"name":"Big Meeting Room"},
-#    {"id":2,"name":"Small Meeting Room"}
-#  ],
-#  "reserved": [
-#    { "room":1, "invited": [1, 3],    "time":"15:45", "date":"2012-09-04"},
-#    { "room":1, "invited": [1, 2, 3], "time":"17:45", "date":"2012-09-04"},
-#    { "room":2, "invited": [2, 3],    "time":"9:45",  "date":"2012-09-05"}
-#  ]
-#}
-#    JSON
-#
-#    csv = DJC.map(company:employees, meetings:meetings) do
-#      join 'meetings:reserved.room' => 'meetings:rooms.id',
-#           'meetings:reserved.invited.*' => 'company:employees.id'
-#
-#      rows('company:employees') do |djc|
-#        djc['first_name'] = 'name{first}'
-#        djc['last_name']  = 'name.last'
-#        djc['full_name']  = with('name{first}', 'name{last}') { |first, last| "#{last}, #{first}" }
-#        djc['title']      = 'jobtitle'
-#        djc['joined']     = 'date started|datejoined'
-#        djc['started']    = with('date started|datejoined') { |date| Date.parse(date) }
-#        djc['boss_name']  = with('id<boss>{first}', 'id<boss>.last') { |first, last| "#{first} #{last}" }
-#      end
-#
-#      rows('meetings:reserved') do |djc|
-#        djc['room']      = 'room[name]'
-#        djc['attending'] = with('invited') { |invited| "#{invited['first']} #{invited['last']}" }.join(',')
-#      end
-#
-#    end
-#
-#    csv.should_not be_nil
-#    csv.length.should == 2
-#    csv.first.should == <<-CSV
-#first_name,last_name,full_name,title,joined,started,boss_name
-#Joe,Schmoe,"Schmoe, Joe",CEO,2001-01-10,2001-01-10,
-#Jane,Jabang,"Jabang, Jane",Internal Affairs Chief,2001-03-10,2001-03-10,Joe Schmoe
-#Mebook,Garblong,"Garblong Mebook,Alien Visitor Hospitality Officer,2001-04-10,2001-04-10,Joe Schmoe
-#    CSV
-#    csv.last.should == <<-CSV
-#room,attending
-#Big Meeting Room,"Joe Schmoe,Mebook Garblong"
-#Big Meeting Room,"Joe Schmoe,Jane Jabang,Mebook Garblong"
-#Small Meeting Room,"Jane Jabang,Mebook Garblong"
-#    CSV
-#
-#  end
+  it "can build a complete CSV from a JSON structure" do
 
+    json = <<-JSON
+{
+  "company": "Company, Inc",
+  "employees": [
+    {"id":1,"name":{"first":"Joe","last":"Schmoe"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
+    {"id":2,"name":{"first":"Jane","last":"Jabang"},    "jobtitle":"Internal Affairs Chief","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1},
+    {"id":3,"name":{"first":"Mebook","last":"Garblong"},"jobtitle":"Alien Visitor Hospitality Officer","address":"123 fake street","date joined":"2001-04-10","boss":1}
+  ],
+  "rooms": [
+    {"id":1,"name":"Big Meeting Room"},
+    {"id":2,"name":"Small Meeting Room"}
+  ],
+  "reserved": [
+    { "room":1, "invited": [1, 3],    "time":"15:45", "date":"2012-09-04"},
+    { "room":1, "invited": [1, 2, 3], "time":"17:45", "date":"2012-09-04"},
+    { "room":2, "invited": [2, 3],    "time":"9:45",  "date":"2012-09-05"}
+  ]
+}
+    JSON
+
+    csv = DJC.build(json) do |djc|
+      djc['name']  = 'employees.*.name.first'
+    end
+
+    csv.should_not be_nil
+    csv.should == <<-CSV
+name
+Joe
+Jane
+Mebook
+    CSV
+
+  end
 
 end
