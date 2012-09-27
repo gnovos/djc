@@ -10,9 +10,18 @@ module DJC
       val = if obj.is_a? Array
               obj[key.to_i]
             elsif obj.is_a? Hash
-              obj[key.to_s]
+              key = key.to_s
+              match = key[/\/(.*)\//, 1]
+              if match.nil?
+                obj[key]
+              else
+                found = obj.keys.select { |k| Regexp.new(match).match(k) }
+                found = found.map { |k| path.empty? ? obj[k] : path.walk(obj[k]) }
+                path.clear
+                found = found.first if found.size < 2
+                found
+              end
             elsif obj.respond_to? key
-              #xxx make more robust?
               obj.send(key)
             end
       path.empty? ? val : path.walk(val)
@@ -85,6 +94,7 @@ module DJC
           end
           value = value.map { |val| block.call(val) } unless block.nil?
           value = value.first if value.length == 1
+          value
         else
           value = paths.first.apply(obj)
           value = block.call(value) unless block.nil?

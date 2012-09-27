@@ -125,7 +125,9 @@ describe DJC do
       "sum"  : [ 1, 10, 100, 1000],
       "avg"  : [ 0, 0, 10, 10],
       "nil"  : null,
-      "yes"  : true
+      "yes"  : true,
+      "sub1" : { "key1" : "val11", "key2" : "val12" },
+      "sub2" : { "key1" : "val21", "key2" : "val22" }
     }
   },
   {
@@ -136,17 +138,20 @@ describe DJC do
       "sum"  : [ 2, 20, 200, 2000],
       "avg"  : [ 0, 0, 20, 20],
       "nil"  : null,
-      "yes"  : true
+      "yes"  : true,
+      "sub1" : { "key1" : "val11", "key2" : "val12" }
     }
   }
 ]
       JSON
 
+      #xxx still need rows()
+
       builder = DJC::Builder.compile do |djc|
-        djc['id']        = "row"
+        djc['id']        = 'row'
         djc['sums']      = sum('data.sum')
         djc['avgs']      = avg('data.avg')
-        djc['yes']       = "data.nil|data.yes|data.stra"
+        djc['yes']       = 'data.nil|data.yes|data.stra'
         djc['join']      = with('data.stra', 'data.strb').join(':')
         djc['crossjoin'] = with('data.stra', 'data.sum', 'data.strb').join(':')
         djc['crosssum']  = with('data.sum', 'data.sum', 'data.sum').sum
@@ -156,16 +161,18 @@ describe DJC do
         djc['match']     = with('data.stra').match(/.[ai]/)
         djc['capture']   = with('data.stra').match(/(.)[ai]/)
         djc['rule']      = rule { |json| "#{json['row']}:#{json.size}" }
-
+        djc['regx']      = '/ro./'
+        djc['multiregx'] = 'data./str./'
+        djc['cmplxregx'] = 'data./sub[12]/./key[12]/'
       end
 
-      builder.header.should == %w(id sums avgs yes join crossjoin crosssum with multiwith each match capture rule)
+      builder.header.should == %w(id sums avgs yes join crossjoin crosssum with multiwith each match capture rule regx multiregx cmplxregx)
 
       rows = builder.build(json)
 
       rows.length.should == 2
-      rows[0].should == [1, 1111, 5.0,  true, 'stringa:stringb', ["stringa:1:stringb", "10", "100", "1000"], [3, 30, 300, 3000], 'agnirts', 'bgnirtsstringa', [2, 11, 101, 1001], ['ri', 'ga'], ['r', 'g'], '1:2' ]
-      rows[1].should == [2, 2222, 10.0, true, 'stringa:stringb', ["stringa:2:stringb", "20", "200", "2000"], [6, 60, 600, 6000], 'agnirts', 'bgnirtsstringa', [3, 21, 201, 2001], ['ri', 'ga'], ['r', 'g'], '2:2' ]
+      rows[0].should == [1, 1111, 5.0,  true, 'stringa:stringb', ["stringa:1:stringb", "10", "100", "1000"], [3, 30, 300, 3000], 'agnirts', 'bgnirtsstringa', [2, 11, 101, 1001], ['ri', 'ga'], ['r', 'g'], '1:2', 1, ['stringa', 'stringb'], [["val11", "val12"], ["val21", "val22"]] ]
+      rows[1].should == [2, 2222, 10.0, true, 'stringa:stringb', ["stringa:2:stringb", "20", "200", "2000"], [6, 60, 600, 6000], 'agnirts', 'bgnirtsstringa', [3, 21, 201, 2001], ['ri', 'ga'], ['r', 'g'], '2:2', 2, ['stringa', 'stringb'], ["val11", "val12"] ]
 
     end
 
