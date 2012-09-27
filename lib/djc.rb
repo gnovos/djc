@@ -3,18 +3,89 @@ require 'csv'
 
 module DJC
 
+  class ::Array
+    def walk(obj)
+      path = self.dup
+      key = path.shift
+      val = if obj.is_a? Array
+              obj[key.to_i]
+            elsif obj.is_a? Hash
+              obj[key.to_s]
+            elsif obj.respond_to? key
+              #xxx make more robust?
+              obj.send(key)
+            end
+      path.empty? ? val : path.walk(val)
+    end
+  end
+
   class Rule
     def parse(paths)
-        rules = paths.split('|')
-        rules.map do |path|
-          path.scan(/\/[^\/]+\/|\<[^\<]\>|[^\[\]\{\}\|\.]+/)
-        end
+      rules = paths.split('|').map do |path|
+        path.scan(/\/[^\/]+\/|\<[^\<]\>|[^\[\]\{\}\|\.]+/)
+      end
+
+      rules
     end
 
     attr_reader :paths, :type, :block
     def initialize(type='lookup', rules, &block)
       @type, @block, @paths = type, block, rules.is_a?(String) ? parse(rules) : rules
     end
+
+    def sum
+      @type, @block = 'sum', proc { |array| array.inject(0, :+) }
+      self
+    end
+
+    def avg
+      @type, @block = 'avg', proc { |array| array.inject(0.0, :+) / array.size }
+      self
+    end
+
+    def join(sep = '')
+      @type, @block = 'join', proc { |vals| vals.compact.join(sep) }
+      self
+    end
+
+    def match(matcher)
+      @type, @matcher = 'match', matcher
+      self
+    end
+
+    def apply(obj)
+      value = nil
+      if type == 'lookup'
+        walker = paths.dup
+        value = nil
+        while value.nil? && path = walker.shift
+          value = path.walk(obj)
+        end
+      else
+        if paths.length > 1
+          value = [[]]
+          paths.each_with_index do |rule, index|
+            val = rule.apply(obj)
+            if val.is_a?(Array)
+              val.each_with_index do |v, row|
+                value[row] ||= []
+                value[row][index] ||= []
+                value[row][index] = v
+              end
+            else
+              value.first << val
+            end
+          end
+          value = value.map { |val| block.call(val) } unless block.nil?
+          value = value.first if value.length == 1
+        else
+          value = paths.first.apply(obj)
+          value = block.call(value) unless block.nil?
+        end
+      end
+      value
+    end
+
   end
 
   class Column
@@ -25,7 +96,7 @@ module DJC
   end
 
   class Builder
-    def self.build(&block)
+    def self.compile(&block)
       builder = Builder.new
       builder.instance_eval &block
       builder
@@ -37,35 +108,42 @@ module DJC
       @columns << Column.new(column, rule)
     end
 
-    def sum(path)
-      Rule.new('sum', path)
+    def header
+      columns.map { |column| column.name }
     end
 
-    def avg(path)
-      Rule.new('avg', path)
+    def sum(*paths)
+      with(*paths).sum
+    end
+
+    def avg(*paths)
+      with(*paths).avg
     end
 
     def with(*paths, &block)
       Rule.new('with', paths.map { |path| Rule.new(path) }, &block)
     end
 
+    def rule(&block)
+      Rule.new('rule', nil, &block)
+    end
+
+    def build(json)
+      rows = []
+      if json.is_a? Array
+        json.each do |row|
+          #xxx ensmartern for arrayed vals, x-by-x
+          rows << @columns.map do |column|
+            column.rule.apply(row)
+          end
+        end
+      end
+      rows
+    end
+
   end
 
   class << self
-
-    def join(token_map)
-
-    end
-
-    def row(tokens, &block)
-    end
-
-    def col(tokens, &block)
-    end
-
-    def rows(tokens, &block)
-    end
-
 
     def build(json = nil, &block)
 #xxx    json = JSON.parse(json) if json.is_a?(String)
