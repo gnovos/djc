@@ -3,12 +3,26 @@ require 'csv'
 
 module DJC
 
+  class ::String
+    def ~
+      "##{self}"
+    end
+  end
+
   class ::Array
     def walk(obj)
       path = self.dup
       key = path.shift.to_s
       val = if obj.is_a? Array
-             obj[key.to_i] if key.match(/^\d+$/)
+              match = /(\d+)(?:-|\.\.\.?)(\d+)/.match(key)
+              if match
+                range = match.captures
+                obj[range.first.to_i..range.last.to_i]
+              elsif key.match(/^(?:\d+,)+\d+$/)
+                obj.values_at(*key.scan(/\d+/).map(&:to_i))
+              elsif key.match(/^\d+$/)
+                obj[key.to_i]
+              end
             elsif obj.is_a? Hash
               match = key[/\/(.*)\//, 1]
               if match.nil?
@@ -38,16 +52,20 @@ module DJC
 
     attr_reader :paths, :type, :block
     def initialize(type='lookup', rules, &block)
-      @type, @block, @paths = type, block, rules.is_a?(String) ? parse(rules) : rules
+      if rules.is_a?(String) && rules[0] == '#'
+        @type, @block, @paths = 'literal', proc { rules[1..-1] }, nil
+      else
+        @type, @block, @paths = type, block, rules.is_a?(String) ? parse(rules) : rules
+      end
     end
 
     def sum
-      @type, @block = 'sum', proc { |array| array.inject(0, :+) }
+      @type, @block = 'sum', proc { |array| array.map(&:to_i).inject(0, :+) }
       self
     end
 
     def avg
-      @type, @block = 'avg', proc { |array| array.inject(0.0, :+) / array.size }
+      @type, @block = 'avg', proc { |array| array.map(&:to_i).inject(0.0, :+) / array.size }
       self
     end
 

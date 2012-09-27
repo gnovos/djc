@@ -15,11 +15,14 @@ describe DJC do
           'foo'   => 'foo',
           'walk1' => ['foo', { 'walk2' => { 'walk3' => [ 'foo', [ 'foo', 'foo', expected, 'foo'], 'foo' ] } }, 'foo' ],
           'bar'   => 'bar',
-          'walk5' => { 'walk6' => 'expected2' }
+          'walk5' => { 'walk6' => 'expected2' },
+          'walk7' => [ 'walk8', 'walk9', 'foo', 'walk0' ]
       }
 
       ['walk1', 1, 'walk2', 'walk3', '1', 2, 'walk4' ].walk(obj).should == 'expected'
       ['walk5', 'walk6'].walk(obj).should == 'expected2'
+      ['walk7', '0-1'].walk(obj).should == [ 'walk8', 'walk9']
+      ['walk7', '0,1,3'].walk(obj).should == [ 'walk8', 'walk9', 'walk0']
     end
 
   end
@@ -116,65 +119,66 @@ describe DJC do
     it "parses JSON via rules" do
 
       json = JSON.parse <<-JSON
-{ "rows" :
-[
-  {
-    "row"  : 1,
-    "data" : {
-      "stra" : "stringa",
-      "strb" : "stringb",
-      "sum"  : [ 1, 10, 100, 1000],
-      "avg"  : [ 0, 0, 10, 10],
-      "nil"  : null,
-      "yes"  : true,
-      "sub1" : { "key1" : "val11", "key2" : "val12" },
-      "sub2" : { "key1" : "val21", "key2" : "val22" }
+{
+  "rows" : [
+    {
+      "row"  : 1,
+      "data" : {
+        "stra" : "stringa",
+        "strb" : "stringb",
+        "sum"  : [ 1, 10, 100, 1000],
+        "avg"  : [ 0, 0, 10, 10],
+        "nil"  : null,
+        "yes"  : true,
+        "sub1" : { "key1" : "val11", "key2" : "val12" },
+        "sub2" : { "key1" : "val21", "key2" : "val22" }
+      }
+    },
+    {
+      "row"  : 2,
+      "data" : {
+        "stra" : "stringa",
+        "strb" : "stringb",
+        "sum"  : [ 2, 20, 200, 2000],
+        "avg"  : [ 0, 0, 20, 20],
+        "nil"  : null,
+        "yes"  : true,
+        "sub1" : { "key1" : "val11", "key2" : "val12" }
+      }
     }
-  },
-  {
-    "row"  : 2,
-    "data" : {
-      "stra" : "stringa",
-      "strb" : "stringb",
-      "sum"  : [ 2, 20, 200, 2000],
-      "avg"  : [ 0, 0, 20, 20],
-      "nil"  : null,
-      "yes"  : true,
-      "sub1" : { "key1" : "val11", "key2" : "val12" }
-    }
-  }
-]
+  ]
 }
       JSON
 
-      #xxx still need rows()
-
       builder = DJC::Builder.compile("rows") do |djc|
-        djc['id']        = 'row'
-        djc['sums']      = sum('data.sum')
-        djc['avgs']      = avg('data.avg')
-        djc['yes']       = 'data.nil|data.yes|data.stra'
-        djc['join']      = with('data.stra', 'data.strb').join(':')
-        djc['crossjoin'] = with('data.stra', 'data.sum', 'data.strb').join(':')
-        djc['crosssum']  = with('data.sum', 'data.sum', 'data.sum').sum
-        djc['with']      = with('data.stra') { |a| a.reverse }
-        djc['multiwith'] = with('data.stra', 'data.strb') { |a, b| "#{b.reverse}#{a}" }
-        djc['each']      = each('data.sum') { |sum| sum + 1 }
-        djc['match']     = with('data.stra').match(/.[ai]/)
-        djc['capture']   = with('data.stra').match(/(.)[ai]/)
-        djc['rule']      = rule { |json| "#{json['row']}:#{json.size}" }
-        djc['regx']      = '/ro./'
-        djc['multiregx'] = 'data./str./'
-        djc['cmplxregx'] = 'data./sub[12]/./key[12]/'
+        djc['id']           = 'row'
+        djc['sums']         = sum('data.sum')
+        djc['avgs']         = avg('data.avg')
+        djc['yes']          = 'data.nil|data.yes|data.stra'
+        djc['join']         = with('data.stra', 'data.strb').join(':')
+        djc['crossjoin']    = with('data.stra', 'data.sum', 'data.strb').join(':')
+        djc['crosssum']     = with('data.sum', 'data.sum', 'data.sum').sum
+        djc['with']         = with('data.stra') { |a| a.reverse }
+        djc['multiwith']    = with('data.stra', 'data.strb') { |a, b| "#{b.reverse}#{a}" }
+        djc['each']         = each('data.sum') { |sum| sum + 1 }
+        djc['match']        = with('data.stra').match(/.[ai]/)
+        djc['capture']      = with('data.stra').match(/(.)[ai]/)
+        djc['rule']         = rule { |json| "#{json['row']}:#{json.size}" }
+        djc['regx']         = '/ro./'
+        djc['multiregx']    = 'data./str./'
+        djc['cmplxregx']    = 'data./sub[12]/./key[12]/'
+        djc['literal']      = ~'literal string'
+        djc['partialsum']   = sum('data.sum[0-1]')
+        djc['selectivesum'] = sum('data.sum[0,2,3]')
       end
-
-      builder.header.should == %w(id sums avgs yes join crossjoin crosssum with multiwith each match capture rule regx multiregx cmplxregx)
 
       rows = builder.build(json)
 
       rows.length.should == 2
-      rows[0].should == [1, 1111, 5.0,  true, 'stringa:stringb', ["stringa:1:stringb", "10", "100", "1000"], [3, 30, 300, 3000], 'agnirts', 'bgnirtsstringa', [2, 11, 101, 1001], ['ri', 'ga'], ['r', 'g'], '1:2', 1, ['stringa', 'stringb'], [["val11", "val12"], ["val21", "val22"]] ]
-      rows[1].should == [2, 2222, 10.0, true, 'stringa:stringb', ["stringa:2:stringb", "20", "200", "2000"], [6, 60, 600, 6000], 'agnirts', 'bgnirtsstringa', [3, 21, 201, 2001], ['ri', 'ga'], ['r', 'g'], '2:2', 2, ['stringa', 'stringb'], ["val11", "val12"] ]
+      rows[0].should == [1, 1111, 5.0,  true, 'stringa:stringb', ['stringa:1:stringb', '10', '100', '1000'], [3, 30, 300, 3000], 'agnirts', 'bgnirtsstringa', [2, 11, 101, 1001], ['ri', 'ga'], ['r', 'g'], '1:2', 1, ['stringa', 'stringb'], [['val11', 'val12'], ['val21', 'val22']], 'literal string', 11, 1101 ]
+      rows[1].should == [2, 2222, 10.0, true, 'stringa:stringb', ['stringa:2:stringb', '20', '200', '2000'], [6, 60, 600, 6000], 'agnirts', 'bgnirtsstringa', [3, 21, 201, 2001], ['ri', 'ga'], ['r', 'g'], '2:2', 2, ['stringa', 'stringb'], ['val11', 'val12'], 'literal string', 22, 2202 ]
+
+      builder.header.should == %w(id sums avgs yes join crossjoin crosssum with multiwith each match capture rule regx multiregx cmplxregx literal partialsum selectivesum)
 
     end
 
