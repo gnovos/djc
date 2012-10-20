@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name         = 'djc'
-  s.version      = '0.2.0'
+  s.version      = '0.3.0'
   s.homepage     = 'http://rubygems.org/gems/djc'
   s.summary      = 'JSON to CSV mapping DSL'
   s.description  = 'Map JSON fields into CSV columns easily'

@@ -392,10 +392,10 @@ end
 
     json = JSON.parse <<-JSON
 [
-    { "id": 10, "name": { "first": "bob",   "last": "sanchez" }, "date_joined": "2001",  "phone":         ["555-1111", "555-2222", "555-3333"], 
+    { "id": 10, "name": { "first": "bob",   "last": "sanchez" }, "date_joined": "2001",  "phone":         ["555-1111", "555-2222", "555-3333"],
       "sales": [50, 10, 30],
       "email_address": "Dirty <sanchez@address.com>",
-      "account_ids": [40, 44, 15, 100, 225, 9916, 318 ] 
+      "account_ids": [40, 44, 15, 100, 225, 9916, 318 ]
     },
     { "id": 20, "name": { "first": "Steph", "last": "Whatzit" }, "year_joined": "2004" , "phone":         ["555-1111", "555-4444", "555-6666", "555-7777"],
       "email_address": "steph@address.com",
@@ -403,7 +403,8 @@ end
     },
     { "id": 30, "name": { "given": "joe",   "last": "biden"   },                         "phone_numbers": ["555-1111", "555-0000", "555-5555", "555-9999", "555-8888"],
       "email_address": "Joe <joe@address.com>" ,
-      "account_ids": [90, 66, 15, 100, 225, 916, 318, 22, 1828, 2, 9 ] 
+      "account_ids": [90, 66, 15, 100, 225, 916, 318, 22, 1828, 2, 9 ] ,
+      "friends": [ { "name": "joe" }, { "name": "bob" }, { "name": "jim" } ]
     }
 ]
     JSON
@@ -417,18 +418,19 @@ end
       djc['avg_sales']     = avg("sales")
       djc['phone_numbers'] = with("/^phone*/[0,2]") { |primary, secondary| "main:#{primary} fax:#{secondary}"}
       djc['person_phones'] = with("phone[1-5]").join(",")
-#      djc['accounts']      = with("account_ids[1,2..4,8+]").sort.join
+      djc['accounts']      = with("account_ids[1,2..4,8+]").join(':')
       djc['crosssum']      = with('sales[0]', 'account_ids[2]').sum
       djc['email_addys']   = with('email_address').match(/[^\<\s]+\@[^\>\s]+/i)
       djc['rule']          = rule { |json| "#{json['id']}:#{json.size}" }
+      djc['friends']       = with("friends.*.name").join(':')
 
     end
 
     csv.should == <<-CSV
-id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,crosssum,email_addys,rule
-10,sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",65,sanchez@address.com,10:7
-20,Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",15,steph@address.com,20:6
-30,biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,15,joe@address.com,30:5
+id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule,friends
+10,sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,
+20,Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,
+30,biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,joe:bob:jim
     CSV
 
   end
