@@ -424,13 +424,11 @@ end
 
     end
 
-    puts csv
-
     csv.should == <<-CSV
-id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule
-10,sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333","[15, 44, 100, 225]",65,"Mr. Bob <email@address.com>,Dirty <sanchez@address.com>",10:7
-20,Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777","[10, 15, 25, 55]",15,"steph@address.com,SW <sw@tf.com>",20:6
-30,biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,"[15, 66, 100, 225, 1828]",15,Joe <joe@address.com>,30:5
+id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,crosssum,email_addys,rule
+10,sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",65,sanchez@address.com,10:7
+20,Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",15,steph@address.com,20:6
+30,biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,15,joe@address.com,30:5
     CSV
 
   end
