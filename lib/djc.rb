@@ -27,16 +27,16 @@ module DJC
                   path.clear
                   sub
                 end
-              elsif /^[\d,-]+$/.match(key)
-                selected = key.split(',').map do |dex|
-                  range = /(\d+)(?:-|\.\.\.?)(\d+)/.match(dex)
-                  if range
-                    range = range.captures
-                    obj[range.first.to_i..range.last.to_i]
-                  else
-                    obj[dex.to_i]
+              elsif /^[\d,\+-\.]+$/.match(key)
+                selected = nil
+                key.split('|').each do |option|
+                  locators = option.split(',').map do |dex|
+                    range = /(?<start>\d+)(?:-|\+|\.\.(?<exclusive>\.)?)?(?<end>-?\d+)/.match(dex)
+                    range ? Range.new(range['start'].to_i, (range['end'] || -1).to_i, range['exclusive']) : dex.to_i
                   end
-                end.flatten
+                  selected = obj.values_at(*locators)
+                  break if selected
+                end
                 selected.size == 1 ? selected.first : selected
               end
             elsif obj.is_a? Hash
@@ -103,8 +103,13 @@ module DJC
 
   class Rule
     def parse(paths)
-      rules = paths.split('|').map do |path|
-        path.scan(/\/[^\/]+\/|\<[^\<]\>|[^\[\]\{\}\|\.]+/)
+
+      regex = /\/[^\/]+\//
+      lookup = /\<[^\<]\>/
+      indexes = /(?:-?\d+(?:(?:\.\.\.?|-|\+)(?:-?\d+)?)?,?)+/
+      node = /[^\[\]\{\}\|\.]+/
+      rules = paths.split('||').map do |path|
+        path.scan(/#{regex}|#{lookup}|#{indexes}|#{node}/)
       end
 
       rules
@@ -117,6 +122,10 @@ module DJC
       else
         @type, @block, @paths = type, block, rules.is_a?(String) ? parse(rules) : rules
       end
+    end
+
+    def to_s
+      "#{paths}:#{type}:#{block}"
     end
 
     def sum
@@ -139,8 +148,27 @@ module DJC
       self
     end
 
+    def sort(&sort_block)
+      @type, @block = 'sort', proc { |sort| sort.is_a?(Array) ? sort.compact.sort(&sort_block) : sort.sort(&sort_block) }
+      self
+    end
+
     def match(matcher)
-      @type, @block = 'match', proc { |val| val.scan(matcher).flatten }
+      @type, @block = 'match', proc do |val|
+        if val
+          if val.is_a?(Array)
+            val.map do |v|
+              if v
+                match = v.scan(matcher).flatten
+                match.size == 1 ? match.first : match
+              end
+            end
+          else
+            match = val.scan(matcher).flatten
+            match.size == 1 ? match.first : match
+          end
+        end
+      end
       self
     end
 
@@ -239,7 +267,6 @@ module DJC
           row = @columns.map do |column|
             column.rule.apply(row)
           end
-          p row
           rows << row
         end
       else
@@ -262,7 +289,6 @@ module DJC
       out = CSV.generate do |csv|
         csv << builder.header
         builder.build(json).each do |row|
-          p "row is #{row}"
           csv << row
         end
       end
