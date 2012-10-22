@@ -402,7 +402,7 @@ end
     { "id": 30, "name": { "given": "joe",   "last": "biden"   },                         "phone_numbers": ["555-1111", "555-0000", "555-5555", "555-9999", "555-8888"],
       "email_address": "Joe <joe@address.com>" ,
       "account_ids": [90, 66, 15, 100, 225, 916, 318, 22, 1828, 2, 9 ] ,
-      "friends": [ { "name": "joe" }, { "name": "bob" }, { "name": "jim" } ]
+      "friends": [ { "name": "joe", "history": { "level": "acquaintance" } }, { "name": "bob", "past": { "level": "best" } }, { "name": "jim" } ]
     }
 ]
     JSON
@@ -421,15 +421,14 @@ end
       djc['email_addys']   = with('email_address').match(/[^\<\s]+\@[^\>\s]+/i)
       djc['rule']          = rule { |json| "#{json['id']}:#{json.size}" }
       djc['friends']       = with("friends.*.name").sort.join(':')
+      djc['friendship']    = with("friends.*.history|past.level").sort.join(':')
     end
 
-    puts csv
-
     csv.should == <<-CSV
-id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule,friends
-10,bob sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,
-20,Steph Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,
-30,joe biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,bob:jim:joe
+id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule,friends,friendship
+10,bob sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,,
+20,Steph Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,,
+30,joe biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,bob:jim:joe,acquaintance:best
     CSV
 
   end
