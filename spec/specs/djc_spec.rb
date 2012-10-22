@@ -411,7 +411,7 @@ end
 
     csv = DJC.build(json) do |djc|
       djc['id']            = 'id'
-      djc['full_name']     = with('name.first|name.given', 'name.last').join(' ')
+      djc['full_name']     = with('name.first||name.given', 'name.last').join(' ')
       djc['company']       = ~"CompanySoft, Inc."
       djc['regex']         = '/.*_joined/'
       djc['total_sales']   = sum("sales")
@@ -422,15 +422,16 @@ end
       djc['crosssum']      = with('sales[0]', 'account_ids[2]').sum
       djc['email_addys']   = with('email_address').match(/[^\<\s]+\@[^\>\s]+/i)
       djc['rule']          = rule { |json| "#{json['id']}:#{json.size}" }
-      djc['friends']       = with("friends.*.name").join(':')
-
+      djc['friends']       = with("friends.*.name").sort.join(':')
     end
+
+    puts csv
 
     csv.should == <<-CSV
 id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule,friends
-10,sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,
-20,Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,
-30,biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,joe:bob:jim
+10,bob sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,
+20,Steph Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,
+30,joe biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,bob:jim:joe
     CSV
 
   end
