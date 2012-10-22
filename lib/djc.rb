@@ -120,45 +120,57 @@ module DJC
 
     end
 
-    attr_reader :paths, :blocks
-    def initialize(rules, &block)
+    attr_reader :type, :paths, :blocks
+    def initialize(type, rules, &block)
       if rules.is_a?(String) && rules[0] == '#'
-        @blocks, @paths = [proc { rules[1..-1] }], nil
+        @type, @blocks, @paths = 'LITERAL', [proc { rules[1..-1] }], nil
       else
-        @blocks, @paths = [block].compact, (rules.is_a?(String) ? parse(rules) : rules)
+        @type, @blocks, @paths = type, [block].compact, (rules.is_a?(String) ? parse(rules) : rules)
       end
     end
 
     def to_s
-      "RULE(#{paths}:#{blocks})"
+      rules = if type == 'LITERAL'
+                @blocks.first.call
+              elsif paths
+                paths.join(paths.first.is_a?(Rule) ? ' + ' : '.')
+              end
+
+      "#{type}(#{rules})"
     end
 
     def sum
+      @type = 'SUM'
       @blocks << proc { |array| array.map(&:to_i).inject(0, :+) if array }
       self
     end
 
     def avg
+      @type = 'AVG'
       @blocks << proc { |array| ( array.map(&:to_i).inject(0.0, :+) / array.size) if array }
       self
     end
 
     def each(&each_block)
+      @type = 'EACH'
       @blocks <<  proc { |array| array.map { |val| each_block.call(val) } if array }
       self
     end
 
     def join(sep = '')
+      @type = 'JOIN'
       @blocks << proc { |vals| vals.is_a?(Array) ? vals.compact.join(sep) : vals }
       self
     end
 
     def sort(&sort_block)
+      @type = 'SORT'
       @blocks << proc { |sort| sort.is_a?(Array) ? sort.compact.sort(&sort_block) : (sort.nil? ? nil : sort.sort(&sort_block)) }
       self
     end
 
     def match(matcher)
+      @type = 'MATCH'
       @blocks << proc do |val|
         if val
           if val.is_a?(Array)
@@ -180,7 +192,7 @@ module DJC
         walker = paths.dup
         value = nil
         while value.nil? && (path = walker.shift)
-          value = path.walk(obj)
+          value = path.is_a?(Rule) ? path.apply(obj) : path.walk(obj)
         end
         value
       else
@@ -215,7 +227,7 @@ module DJC
   class Column
     attr_reader :name, :rule
     def initialize(name, rule)
-      @name, @rule = name, rule.is_a?(Rule) ? rule : Rule.new(rule)
+      @name, @rule = name, rule.is_a?(Rule) ? rule : Rule.new('LOOKUP', rule)
     end
   end
 
@@ -227,7 +239,7 @@ module DJC
     end
 
     def initialize(path = nil)
-      @path = Rule.new(path) if path
+      @path = Rule.new('USING', path) if path
     end
 
     attr_reader :columns
@@ -253,11 +265,11 @@ module DJC
     end
 
     def with(*paths, &block)
-      Rule.new(paths.map { |path| Rule.new(path) }, &block)
+      Rule.new('WITH', paths.map { |path| Rule.new('LOOKUP', path) }, &block)
     end
 
     def rule(&block)
-      Rule.new(nil, &block)
+      Rule.new('RULE', nil, &block)
     end
 
     def build(json)

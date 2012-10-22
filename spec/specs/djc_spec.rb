@@ -92,12 +92,12 @@ describe DJC do
 
     it "parses path tokens properly" do
       simple = "token"
-      rule = DJC::Rule.new(simple)
+      rule = DJC::Rule.new('LOOKUP', simple)
       rule.paths.length.should == 1
       rule.paths.first.should == [ 'token' ]
 
       complex = "token[0]{subtoken{subsub}.token_with_spaces and digits 123.1||alternate||/regex[1-3]/<ref>||#literal"
-      rule = DJC::Rule.new(complex)
+      rule = DJC::Rule.new('LOOKUP', complex)
       rule.paths.length.should == 4
       rule.paths[0].should == [ 'token', '0', 'subtoken', 'subsub', 'token_with_spaces and digits 123', '1' ]
       rule.paths[1].should == [ 'alternate' ]
@@ -421,14 +421,13 @@ end
       djc['email_addys']   = with('email_address').match(/[^\<\s]+\@[^\>\s]+/i)
       djc['rule']          = rule { |json| "#{json['id']}:#{json.size}" }
       djc['friends']       = with("friends.*.name").sort.join(':')
-      djc['friendship']    = with("friends.*.history|past.level").sort.join(':')
     end
 
     csv.should == <<-CSV
-id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule,friends,friendship
-10,bob sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,,
-20,Steph Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,,
-30,joe biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,bob:jim:joe,acquaintance:best
+id,full_name,company,regex,total_sales,avg_sales,phone_numbers,person_phones,accounts,crosssum,email_addys,rule,friends
+10,bob sanchez,"CompanySoft, Inc.",2001,90,30.0,main:555-1111 fax:555-3333,"555-2222,555-3333",44:15:100:225,65,sanchez@address.com,10:7,
+20,Steph Whatzit,"CompanySoft, Inc.",2004,,,main:555-1111 fax:555-6666,"555-4444,555-6666,555-7777",55:15:10:25,15,steph@address.com,20:6,
+30,joe biden,"CompanySoft, Inc.",,,,main:555-1111 fax:555-5555,,66:15:100:225:1828,15,joe@address.com,30:6,bob:jim:joe
     CSV
 
   end
