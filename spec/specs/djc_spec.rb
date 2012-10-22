@@ -11,6 +11,15 @@ describe DJC do
   end
 
   describe Array do
+
+    it "can select the first block that return non-nil" do
+
+      count = 0
+      [1,2,3,4,5].select_first { |i| count += 1; i == 3 ? "found" : nil }.should == "found"
+      count.should == 3;
+
+    end
+
     it "can walk an object tree" do
 
       expected = "expected"
@@ -108,16 +117,13 @@ describe DJC do
       builder.columns.length.should == 3
 
       builder.columns[0].name.should == 'simple'
-      builder.columns[0].rule.type.should == 'lookup'
       builder.columns[0].rule.paths[0].should == [ 'token' ]
 
       builder.columns[1].name.should == 'complex'
-      builder.columns[1].rule.type.should == 'lookup'
       builder.columns[1].rule.paths[0].should == [ 'token', 'subtoken' ]
       builder.columns[1].rule.paths[1].should == [ 'alternate', 'altsubtoken' ]
 
       builder.columns[2].name.should == 'simple'
-      builder.columns[2].rule.type.should == 'lookup'
       builder.columns[2].rule.paths[0].should == [ 'duplicate names are valid' ]
     end
 
@@ -134,37 +140,29 @@ describe DJC do
       builder.columns.length.should == 6
 
       builder.columns[0].name.should == 'sum rule'
-      builder.columns[0].rule.type.should == 'sum'
       builder.columns[0].rule.paths.length.should == 1
       builder.columns[0].rule.paths.first.paths.should == [[ 'token', 'path' ]]
 
       builder.columns[1].name.should == 'avg rule'
-      builder.columns[1].rule.type.should == 'avg'
       builder.columns[1].rule.paths.length.should == 1
       builder.columns[1].rule.paths.first.paths.should == [[ 'token', 'path' ]]
 
       builder.columns[2].name.should == 'with rule'
-      builder.columns[2].rule.type.should == 'with'
       builder.columns[2].rule.paths.length.should == 2
 
       with_rule = builder.columns[2].rule
 
       with_rule.paths[0].class.should == DJC::Rule
-      with_rule.paths[0].type.should == 'lookup'
       with_rule.paths[0].paths.should == [[ 'token', 'path', 'a' ]]
 
       with_rule.paths[1].class.should == DJC::Rule
-      with_rule.paths[1].type.should == 'lookup'
       with_rule.paths[1].paths.should == [[ 'token', 'path', 'b' ]]
 
       builder.columns[3].name.should == 'join with rule'
-      builder.columns[3].rule.type.should == 'join'
 
       builder.columns[4].name.should == 'match with rule'
-      builder.columns[4].rule.type.should == 'match'
 
       builder.columns[5].name.should == 'custom rule'
-      builder.columns[5].rule.type.should == 'rule'
 
     end
 
@@ -411,7 +409,7 @@ end
 
     csv = DJC.build(json) do |djc|
       djc['id']            = 'id'
-      djc['full_name']     = with('name.first||name.given', 'name.last').join(' ')
+      djc['full_name']     = with('name.first|given', 'name.last').join(' ')
       djc['company']       = ~"CompanySoft, Inc."
       djc['regex']         = '/.*_joined/'
       djc['total_sales']   = sum("sales")

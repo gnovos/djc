@@ -12,47 +12,54 @@ module DJC
 
   class ::Array
 
+    def select_first(&block)
+      selected = nil
+      each do |item|
+        selected = block.call(item)
+        break if selected
+      end
+      selected
+    end
+
     def walk(obj)
       path = self.dup
-      key = path.shift.to_s
+      keys = path.shift.to_s.split('|')
 
-      val = if obj.is_a? Array
-              if key == '*'
-                if path.empty?
-                  obj
-                else
-                  sub = obj.map do |inner|
-                    path.dup.walk(inner)
-                  end
-                  path.clear
-                  sub
-                end
-              elsif /^[\d,\+-\.]+$/.match(key)
-                selected = nil
-                key.split('|').each do |option|
-                  locators = option.split(',').map do |dex|
-                    range = /(?<start>\d+)(?:-|\+|\.\.(?<exclusive>\.)?)?(?<end>-?\d+)/.match(dex)
-                    range ? Range.new(range['start'].to_i, (range['end'] || -1).to_i, range['exclusive']) : dex.to_i
-                  end
-                  selected = obj.values_at(*locators)
-                  break if selected
-                end
-                selected.size == 1 ? selected.first : selected
+      val = keys.select_first do |key|
+        if obj.is_a? Array
+          if key == '*'
+            if path.empty?
+              obj
+            else
+              sub = obj.map do |inner|
+                path.dup.walk(inner)
               end
-            elsif obj.is_a? Hash
-              match = key[/\/(.*)\//, 1]
-              if match.nil?
-                obj[key]
-              else
-                found = obj.keys.select { |k| Regexp.new(match).match(k) }
-                found = found.map { |k| path.empty? ? obj[k] : path.walk(obj[k]) }
-                path.clear
-                found = found.first if found.size < 2
-                found
-              end
-            elsif obj.respond_to? key
-              obj.send(key)
+              path.clear
+              sub
             end
+          elsif /^[\d,\+-\.]+$/.match(key)
+            locators = key.split(',').map do |dex|
+              range = /(?<start>\d+)(?:-|\+|\.\.(?<exclusive>\.)?)?(?<end>-?\d+)/.match(dex)
+              range ? Range.new(range['start'].to_i, (range['end'] || -1).to_i, range['exclusive']) : dex.to_i
+            end
+            selected = obj.values_at(*locators)
+            selected.size == 1 ? selected.first : selected
+          end
+        elsif obj.is_a? Hash
+          match = key[/\/(.*)\//, 1]
+          if match.nil?
+            obj[key]
+          else
+            found = obj.keys.select { |k| Regexp.new(match).match(k) }
+            found = found.map { |k| path.empty? ? obj[k] : path.walk(obj[k]) }
+            path.clear
+            found = found.first if found.size < 2
+            found
+          end
+        elsif obj.respond_to? key
+          obj.send(key)
+        end
+      end
 
       path.empty? ? val : path.walk(val)
     end
