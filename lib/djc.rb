@@ -1,312 +1,235 @@
 require 'json'
 require 'csv'
+require 'sender'
+require 'ctx'
 
 module DJC
 
-  class ::String
-    def ~@
-      "##{self}"
-    end
-
+  class ::Object
+    def djrent(rent = :djrent) @djrent = rent unless rent == :djrent; @djrent end
+    def djroot() djrent.nil? ? self : djrent.djroot end
   end
 
   class ::Array
-
-    def select_first(&block)
-      selected = nil
-      each do |item|
-        selected = block.call(item)
-        break if selected
-      end
-      selected
-    end
-
-    def walk(obj)
-      path = self.dup
-      keys = path.shift.to_s.split('|')
-
-      val = keys.select_first do |key|
-        if obj.is_a? Array
-          if key == '*'
-            if path.empty?
-              obj
-            else
-              sub = obj.map do |inner|
-                path.dup.walk(inner)
-              end
-              path.clear
-              sub
-            end
-          elsif /^[\d,\+-\.]+$/.match(key)
-            locators = key.split(',').map do |dex|
-              range = /(?<start>\d+)(?:-|\+|\.\.(?<exclusive>\.)?)?(?<end>-?\d+)/.match(dex)
-              range ? Range.new(range['start'].to_i, (range['end'] || -1).to_i, range['exclusive']) : dex.to_i
-            end
-            selected = obj.values_at(*locators)
-            selected.size == 1 ? selected.first : selected
-          end
-        elsif obj.is_a? Hash
-          match = key[/\/(.*)\//, 1]
-          if match.nil?
-            obj[key]
-          else
-            found = obj.keys.select { |k| Regexp.new(match).match(k) }
-            found = found.map { |k| path.empty? ? obj[k] : path.walk(obj[k]) }
-            path.clear
-            found = found.first if found.size < 2
-            found
-          end
-        elsif obj.respond_to? key
-          obj.send(key)
-        end
-      end
-
-      path.empty? ? val : path.walk(val)
-    end
-
-    def collate
-      collated = [[]]
-      fill = {}
-      each_with_index do |obj, index|
-        if obj.is_a?(Array)
-          obj.each_with_index do |item, row|
-            collated[row] ||= []
-            collated[row][index] = item
-          end
-        end
-      end
-      collated.each do |row|
-        each_with_index do |obj, index|
-          unless obj.is_a?(Array)
-            row[index] = obj
-          end
-        end
-      end
-      collated.size == 1 ? collated.first : collated
-    end
-
-
-    def cross
-      crossed = [[]]
-
-      each do |obj|
-        if obj.is_a?(Array)
-          adding = []
-          obj.each_with_index do |item, index|
-            crossed.each do |cross|
-              row = cross.dup
-              row << item
-              adding << row
-            end
-          end
-          crossed = adding
-        else
-          crossed.each { |cross| cross << obj }
-        end
-      end
-      crossed.size == 1 ? crossed.first : crossed
-    end
+    def sequester(lim = 1) compact.size <= lim ? compact.first : self end
   end
 
-  class Rule
-    def parse(paths)
-      regex = /\/[^\/]+\//
-      lookup = /\<[^\<]\>/
-      indexes = /(?:-?\d+(?:(?:\.\.\.?|-|\+)(?:-?\d+)?)?,?)+/
-      node = /[^\[\]\{\}\.]+/
-      paths.split('||').map do |path|
-        path.scan(/#{regex}|#{lookup}|#{indexes}|#{node}/)
-      end
+  class Circle < Hash
 
+    def initialize
+      super
+      @index = 0
     end
 
-    attr_reader :type, :paths, :blocks
-    def initialize(type, rules, &block)
-      if rules.is_a?(String) && rules[0] == '#'
-        @type, @blocks, @paths = 'LITERAL', [proc { rules[1..-1] }], nil
-      else
-        @type, @blocks, @paths = type, [block].compact, (rules.is_a?(String) ? parse(rules) : rules)
+    def <<(val)
+      self[@index] = val
+      @index += 1
+    end
+
+    def []=(*keys, val)
+      val.djrent(self)
+      keys.each do |key|
+        if key.is_a?(Range)
+          key.to_a.each{ |k| self[k]= val }
+        else
+          @index = key + 1 if key.is_a?(Fixnum) && key > @index
+          store(key.sym, val)
+        end
       end
+    end
+
+    alias_method :lookup, :[]
+    def [](*keys) keys.map { |key| self.lookup(key.sym) }.sequester
+    end
+
+    def method_missing(name, *args, &block)
+      self.has_key?(name) ? self[name] : super(name, *args, &block)
+    end
+
+  end
+
+  class Token
+    def initialize(type, *args, &block)
+      @type, @path, @options = type.to_sym, nil, {}
+      tokens = []
+      args.each do |arg|
+        if arg.is_a? Hash
+          @options.merge!(arg)
+        elsif arg.is_a? String
+          tokens << arg.sym
+        else
+          tokens << arg
+        end
+      end
+      @path = tokens.sequester
     end
 
     def to_s
-      rules = if type == 'LITERAL'
-                @blocks.first.call
-              elsif paths
-                paths.join(paths.first.is_a?(Rule) ? ' + ' : '.')
-              end
-
-      "#{type}(#{rules})"
+      "#{@type.to_s.upcase}(#@path#{ " => #@options" unless @options.empty?})"
     end
 
-    def sum
-      @type = 'SUM'
-      @blocks << proc { |array| array.map(&:to_i).inject(0, :+) if array }
-      self
-    end
-
-    def avg
-      @type = 'AVG'
-      @blocks << proc { |array| ( array.map(&:to_i).inject(0.0, :+) / array.size) if array }
-      self
-    end
-
-    def each(&each_block)
-      @type = 'EACH'
-      @blocks <<  proc { |array| array.map { |val| each_block.call(val) } if array }
-      self
-    end
-
-    def join(sep = '')
-      @type = 'JOIN'
-      @blocks << proc { |vals| vals.is_a?(Array) ? vals.compact.join(sep) : vals }
-      self
-    end
-
-    def sort(&sort_block)
-      @type = 'SORT'
-      @blocks << proc { |sort| sort.is_a?(Array) ? sort.compact.sort(&sort_block) : (sort.nil? ? nil : sort.sort(&sort_block)) }
-      self
-    end
-
-    def match(matcher)
-      @type = 'MATCH'
-      @blocks << proc do |val|
-        if val
-          if val.is_a?(Array)
-            val.compact.map do |v|
-              match = v.scan(matcher).flatten
-              match.size == 1 ? match.first : match
-            end
-          else
-            match = val.scan(matcher).flatten
-            match.size == 1 ? match.first : match
-          end
-        end
-      end
-      self
-    end
-
-    def apply(obj)
-      if @blocks.empty?
-        walker = paths.dup
-        value = nil
-        while value.nil? && (path = walker.shift)
-          value = path.is_a?(Rule) ? path.apply(obj) : path.walk(obj)
-        end
-        value
-      else
-        if paths.nil? || paths.empty?
-          value = blocks.inject(obj) { |val, block| block.call(val) }
-        elsif paths.length > 1
-          value = [[]]
-          paths.each_with_index do |rule, index|
-            val = rule.apply(obj)
-            if val.is_a?(Array)
-              val.each_with_index do |v, row|
-                value[row] ||= []
-                value[row][index] ||= []
-                value[row][index] = v
-              end
-            else
-              value.first << val
-            end
-          end
-          value = value.map { |val| blocks.inject(val) { |v, block| block.call(v) }} unless blocks.empty?
-          value = value.first if value.length == 1
-          value
+    def extract(obj, path)
+      if obj.is_a?(Array)
+        if path == :*
+          obj
         else
-          value = paths.first.apply(obj)
-          value = blocks.inject(value) { |val, block| block.call(val) } unless blocks.empty?
-        end
-      end
-      value
-    end
-  end
-
-  class Column
-    attr_reader :name, :rule
-    def initialize(name, rule)
-      @name, @rule = name, rule.is_a?(Rule) ? rule : Rule.new('LOOKUP', rule)
-    end
-  end
-
-  class Builder
-    def self.compile(path=nil, &block)
-      builder = Builder.new(path)
-      builder.instance_eval &block
-      builder
-    end
-
-    def initialize(path = nil)
-      @path = Rule.new('USING', path) if path
-    end
-
-    attr_reader :columns
-    def []=(column, rule)
-      @columns ||= []
-      @columns << Column.new(column, rule)
-    end
-
-    def header
-      columns.map { |column| column.name }
-    end
-
-    def sum(*paths)
-      with(*paths).sum
-    end
-
-    def avg(*paths)
-      with(*paths).avg
-    end
-
-    def each(*paths, &block)
-      with(*paths).each(&block)
-    end
-
-    def with(*paths, &block)
-      Rule.new('WITH', paths.map { |path| Rule.new('LOOKUP', path) }, &block)
-    end
-
-    def rule(&block)
-      Rule.new('RULE', nil, &block)
-    end
-
-    def build(json)
-      json = @path.apply(json) if @path
-      rows = []
-      if json.is_a? Array
-        json.each do |row|
-          row = @columns.map do |column|
-            column.rule.apply(row)
-          end
-          rows << row
+          obj.map { |o| extract(o, path)}
         end
       else
-        rows << @columns.map do |column|
-          column.rule.apply(json)
+        if path.is_a?(Array)
+          path.map { |pth| obj[pth.sym] }
+        else
+          obj[path.sym]
         end
       end
-      rows
     end
 
+    def walk(obj, root = obj)
+      val = case @type
+              when :literal
+                @path.to_s
+              when :path
+                extract(obj, @path)
+              when :regex
+                obj.keys.map { |key| key if key.match(@path) }.compact.map{|key| obj[key]}
+              when :any
+                @path.return_first { |token| token.walk(obj, root) }
+              when :all
+                matches = @path.map { |token| token.walk(obj, root) }
+                matches.compact.size == @path.size ? matches : nil
+              when :each
+                @path.map { |token| token.walk(obj, root) }
+              when :lookup
+                lookup = @path.walk(obj)
+                if lookup.is_a?(Array)
+                  lookup.flatten.map { |lu| lu.tokenize.walk(root) }.flatten(1)
+                else
+                  lookup.tokenize.walk(root)
+                end
+              when :inverse
+                #xxx hrd
+              when :root
+                tree = [@path].flatten
+                while (path = tree.shift)
+                  obj = path.walk(obj)
+                end
+                obj.is_a?(Array) ? obj.flatten : obj
+            end
+
+      @options[:indexes] ? val.values_at(*@options[:indexes])  : val
+    end
   end
 
-  class << self
+  class ::String
+    def ~@
+      "~#{self}"
+    end
 
-    def build(json = nil, &block)
-      json = JSON.parse(json) if json.is_a?(String)
+    def tokenize
+      tokens = []
+      scan(/\~([^\.]+)|\/(.*?)\/|\{\{(.*?)\}\}|([^\.\[]+)(?:\[([\d\+\.,-]+)\])?/).each do |literal, regex, lookup, path, indexes|
+        if literal
+          tokens << Token.new(:literal, literal)
+        elsif lookup
+          tokens << Token.new(:lookup, lookup.tokenize)
+        elsif regex
+          tokens << Token.new(:regex, Regexp.new(regex))
+        elsif path
+          eachs = path.split(",")
+          ors = path.split("|")
+          ands = path.split("&")
+          if eachs.size > 1
+            tokens << Token.new(:each, eachs.map { |token| token.tokenize() })
+          elsif ands.size > 1
+            tokens << Token.new(:all, ands.map { |token| token.tokenize() })
+          elsif ors.size > 1
+            tokens << Token.new(:any, ors.map { |token| token.tokenize() })
+          end
 
-      builder = Builder.compile(&block)
+          unless ands.size + ors.size + eachs.size > 3
+            options = {}
+            options[:indexes] = indexes.scan(/(\d+)(?:(?:\.\.(\.)?|-?)(-?\d+|\+))?/).map do |start, exc, len|
+              len.nil? ? start.to_i : (Range.new(start.to_i, (len == "+" ? -1 : len.to_i), !exc.nil?))
+            end if indexes
 
-      out = CSV.generate do |csv|
-        csv << builder.header
-        builder.build(json).each do |row|
-          csv << row
+            if path[0] == '!'
+              tokens << Token.new(:inverse, Token.new(:path, path[1..-1].sym, options))
+            else
+              tokens << Token.new(:path, path.sym, options)
+            end
+          end
         end
       end
-      out
+
+      tokens.size == 1 ? tokens.first : Token.new(:root, tokens)
+
     end
   end
+
+  #xxx where types of mappings needed (so not all are "and")
+
+  class Mapper
+
+    class << self
+      def map(objects, &block)
+        self.new(&block).map(objects)
+      end
+    end
+
+    class Mapping
+      attr_accessor :left, :right, :matchers
+      def initialize(left, right) @left, @right, @matchers = left, right, {} end
+      def to_s() "MERGE #@right INTO #@left WHERE #{@matchers.map { |k, v| "#{k} = #{v}" }.join(" AND ")}" end
+    end
+
+    class ::String
+      ctx :mapping do
+        def <(other)
+          puts ":: '#{@@contexts}'  #{self} < #{other}"
+          ctx[:mappings] ||= []
+          ctx[:mappings] << Mapping.new(self, other)
+        end
+
+        def ==(other)
+          puts ":: '#{@@contexts}' #{self} == #{other}"
+          if ctx[:mappings]
+            ctx[:mappings].last.matchers[self] = other
+          end
+
+        end
+      end
+    end
+
+    def merge(*args)
+    end
+
+    def where(*args)
+    end
+
+    attr_accessor :mappings
+    def initialize(&block)
+      ctx :mapping do
+        self.instance_eval(&block)
+        self.mappings = ctx[:mappings]
+      end
+    end
+
+    def map(objects)
+
+      mappings.each do |mapping|
+        puts "left  #{mapping.left}"
+        puts "  tokens #{mapping.left.tokenize}"
+        puts "  walked #{mapping.left.tokenize.walk(objects)}"
+
+        puts "right #{mapping.right}"
+        puts "  tokens #{mapping.right.tokenize}"
+        puts "  walked #{mapping.right.tokenize.walk(objects)}"
+
+      end
+
+      objects
+    end
+  end
+
 
 end
