@@ -174,7 +174,7 @@ module DJC
     def __djc__name(rule = nil)
       @name ? "#{@name}_#{rule}" : rule
     end
-    def initialize(rule = nil, parent = nil, name = parent.try?.__djc__name(rule), &block)
+    def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc__name(rule), &block)
       @rule, @parent, @name, @capture, @nodes = rule, parent, name, false, []
       ctx(:djc_dsl_def) do
         ctx[:dsl] = self
@@ -183,6 +183,10 @@ module DJC
     end
     def +@()
       @capture = true
+      self
+    end
+    def >(other)
+      @name = other
       self
     end
     def to_str() to_s end
@@ -200,38 +204,34 @@ module DJC
       dsl
     end
 
-    def parse(data)
-      @nodes.map do |node|
-        node.extract(data)
+    def rule_parse(data)
+      if data.is_a?(Array)
+        data.flat_map do |element|
+          rule_parse(element)
+        end
+      else
+        [ { @name => @rule.to_s.walk(data) } ]
       end
     end
 
-    def extract(data)
-      puts "ENTER #{@rule}"
-      value = data[@rule]
+    def parse(data, extract = true)
       if @capture
-        {@name => value}
+        rule_parse(data)
       else
-        if value.is_a?(Array)
-          rows = []
-          value.each do |val|
-            row = {}
-            @nodes.each do |node|
-              row.merge!(node.extract(val))
-            end
-            roes << row
-            puts "mMerged Row: #{row}"
+        data = data[@rule] if @rule && extract
+        if data.is_a?(Array)
+          data.flat_map do |element|
+            parse(element, false)
           end
-          puts "merged rowes #{rows}"
         else
-          row = {}
-          @nodes.each do |node|
-            row.merge!(node.extract(value))
+          @nodes.inject([]) do |rows, node|
+            result = node.parse(data)
+            result.flat_map do |res|
+              rows.empty? ? res : rows.map { |row| row.merge(res) }
+            end
           end
-          puts "Merged Row: #{row}"
         end
       end
-
     end
   end
 end
