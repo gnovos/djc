@@ -71,6 +71,34 @@ describe DJC do
       ]
     end
 
+    it "can have complex finders" do
+      data = [ { a: { b: { c0: { val: 0 }, c1: { val: 1 }, c2: { val: 2 }, c3: { val: 3 }}}}]
+
+      dsls = [
+          DJC::DSL.new do
+            find("a.b./c[023]/") do
+              +val("val")
+            end
+          end,
+          DJC::DSL.new do
+            a.b do
+              match(/c[023]/) do
+                +val("val")
+              end
+            end
+          end
+      ]
+
+      dsls.each do |dsl|
+        dsl.parse(data).sort{ |a,b| a.to_s <=> b.to_s }.should == [
+            { "val" => 0 },
+            { "val" => 2 },
+            { "val" => 3 }
+        ].sort { |a,b| a.to_s <=> b.to_s }
+      end
+
+    end
+
     it "can parse a rule out of an array of data" do
       data = [
           { search_key: "found A", other_key:"not correct"},

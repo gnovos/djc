@@ -156,17 +156,24 @@ module DJC
         def +@()
           +ctx[:dsl].method_missing(self.to_sym)
         end
+        def -@()
+          ctx[:dsl].find(self)
+        end
       end
     end
     def __djc__name(rule = nil)
       @name ? "#{@name}_#{rule}" : rule
     end
     def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc__name(rule), &block)
-      @rule, @parent, @name, @capture, @nodes = rule, parent, name, false, []
+      @rule, @parent, @name, @capture, @finder, @nodes = rule, parent, name, false, false, []
       ctx(:djc_dsl_def) do
         ctx[:dsl] = self
         instance_eval(&block)
       end if block
+    end
+    def -@()
+      @finder = true
+      self
     end
     def +@()
       @capture = true
@@ -184,6 +191,13 @@ module DJC
       str += " {\n#{@nodes.map {|n| ("  " * (depth + 1)) + n.to_s(depth + 1)}.join("\n") }\n#{"  " * depth}}" unless @nodes.empty?
       str
     end
+
+    def find(rule, &block)
+      rule = rule.inspect if rule.is_a?(Regexp)
+      -method_missing(rule,&block)
+    end
+    alias_method :match, :find
+    alias_method :with, :find
 
     def method_missing(name, *args, &block)
       dsl = DSL.new(name, self, *args, &block)
@@ -205,7 +219,13 @@ module DJC
       if @capture
         rule_parse(data)
       else
-        data = data[@rule] if data && @rule && extract && data.is_a?(Hash)
+        data = if @finder && extract
+          @rule.to_s.walk(data)
+        elsif data && @rule && extract && data.is_a?(Hash)
+          data[@rule]
+        else
+          data
+        end
         if data.is_a?(Array)
           data.flat_map do |element|
             parse(element, false)
