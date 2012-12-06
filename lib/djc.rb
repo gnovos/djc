@@ -1,6 +1,5 @@
 require 'json'
 require 'csv'
-require 'sender'
 require 'ctx'
 
 module DJC
@@ -21,7 +20,9 @@ module DJC
 
     class ::String
       ctx :mapping do
+        def ~@() "~#{self}" end
         def -@() "^.#{self}" end
+
         def &(other)
           ctx[:mappings] ||= []
           if other.is_a?(Mapping)
@@ -162,6 +163,75 @@ module DJC
     Builder.new(&block).build(parsed)
   end
 
+  class DSL < ::Object
+    class ::String
+      ctx(:djc_dsl_def) do
+        def +@()
+          +ctx[:dsl].method_missing(self.to_sym)
+        end
+      end
+    end
+    def __djc__name(rule = nil)
+      @name ? "#{@name}_#{rule}" : rule
+    end
+    def initialize(rule = nil, parent = nil, name = parent.try?.__djc__name(rule), &block)
+      @rule, @parent, @name, @capture, @nodes = rule, parent, name, false, []
+      ctx(:djc_dsl_def) do
+        ctx[:dsl] = self
+        instance_eval(&block)
+      end if block
+    end
+    def +@()
+      @capture = true
+      self
+    end
+    def to_str() to_s end
+    def to_s(depth = 0)
+      str = @capture ? "+" : ""
+      str += (@rule || "ROOT").to_s
+      str += "(#@name)" if @name
+      str += " {\n#{@nodes.map {|n| ("  " * (depth + 1)) + n.to_s(depth + 1)}.join("\n") }\n#{"  " * depth}}" unless @nodes.empty?
+      str
+    end
 
+    def method_missing(name, *args, &block)
+      dsl = DSL.new(name, self, *args, &block)
+      @nodes << dsl
+      dsl
+    end
 
+    def parse(data)
+      @nodes.map do |node|
+        node.extract(data)
+      end
+    end
+
+    def extract(data)
+      puts "ENTER #{@rule}"
+      value = data[@rule]
+      if @capture
+        {@name => value}
+      else
+        if value.is_a?(Array)
+          rows = []
+          value.each do |val|
+            row = {}
+            @nodes.each do |node|
+              row.merge!(node.extract(val))
+            end
+            roes << row
+            puts "mMerged Row: #{row}"
+          end
+          puts "merged rowes #{rows}"
+        else
+          row = {}
+          @nodes.each do |node|
+            row.merge!(node.extract(value))
+          end
+          puts "Merged Row: #{row}"
+        end
+      end
+
+    end
+  end
 end
