@@ -227,6 +227,79 @@ describe DJC do
           { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => "val211" }
       ].sort { |a,b| a.to_s <=> b.to_s }
     end
+
+    it "can handle incomplete JSON documents" do
+      data = { depth_0: {
+          depth_1_found: "found 1",
+          depth_1: {
+              depth_2: [
+                  { depth_3_found: "found 3a", other: "wrong" },
+                  { depth_3_found: "found 3b", other: "wrong" },
+                  { depth_3_found: "found 3c", other: "wrong" },
+              ],
+              other: "wrong",
+              complex_a: [
+                  { val: "val1",
+                    cplxb: [
+                        { cplxc: { cplxd: [ { val: "val111" }, { val: "val112" } ] } },
+                        { cplxc: { other: "other" } },
+                        { other: "other" },
+                    ]
+                  },
+                  { val: "val2",
+                    cplxb: [
+                        { cplxc: { cplxd: [ { val: "val211" }, { other: "other" } ] } } ]
+                  },
+                  { other: "other"}
+              ]
+          },
+          other: "wrong"
+      },
+               other: "wrong"  }
+
+      dsl = DJC::DSL.new do
+        depth_0 do
+          +depth_1_found("d1")
+          depth_1 do
+            depth_2 do
+              +depth_3_found("d3")
+            end
+            complex_a do
+              +val("val")
+              cplxb.cplxc.cplxd do
+                +val("innerval")
+              end
+            end
+          end
+        end
+      end
+
+      dsl.parse(data).sort{ |a,b| a.to_s <=> b.to_s }.should == [
+        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => "val111"},
+        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => "val112"},
+        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3a", "val" => "val2", "innerval" => "val211"},
+        { "d1" => "found 1", "d3" => "found 3a", "val" => "val2", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3a", "val" => nil,    "innerval" => nil},
+
+        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => "val111"},
+        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => "val112"},
+        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3b", "val" => "val2", "innerval" => "val211"},
+        { "d1" => "found 1", "d3" => "found 3b", "val" => "val2", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3b", "val" => nil,    "innerval" => nil},
+
+        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => "val111"},
+        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => "val112"},
+        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => "val211"},
+        { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => nil},
+        { "d1" => "found 1", "d3" => "found 3c", "val" => nil,    "innerval" => nil}
+      ].sort { |a,b| a.to_s <=> b.to_s }
+    end
   end
 
   it "can be a readable DSL that easily makes sense" do
