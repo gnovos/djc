@@ -95,11 +95,6 @@ module DJC
   end
 
   class Builder
-    class Column
-      attr_accessor :name
-      def initialize(name) @name = name end
-      def to_s() "COLUMN(#{name.to_s})" end
-    end
     class Rule
       attr_accessor :type, :args, :block, :chain
       def initialize(type, *args, &block) @type, @args, @block, @chain = type.sym, args, block, [] end
@@ -109,27 +104,10 @@ module DJC
         self
       end
     end
-    class ::String
-      ctx :compile do
-        def <=(other)
-          ctx[:columns] ||= {}
-          ctx[:columns][Column.new(self)] = other.is_a?(Rule) ? other : Rule.new(:path, other.to_s)
-        end
-        def -@() "^.#{self}" end
-        def method_missing(other) "#{self}.#{other}" end
-        def match(matcher, &block) Rule.new(:path, self).match(matcher, &block) end
-        def join(matcher, &block) Rule.new(:path, self).join(matcher, &block) end
-        def each(&block) Rule.new(:path, self).each(&block) end
-        def sum() Rule.new(:path, self).sum() end
-        def avg() Rule.new(:path, self).avg() end
-      end
-    end
-    def method_missing(name) name.to_s end
 
     def initialize(&block)
       ctx :compile do
         self.instance_eval(&block)
-        pp ctx[:columns]
       end
     end
 
@@ -137,11 +115,20 @@ module DJC
     alias :mappings :map
 
     def rules(&block)
-      instance_eval(&block)
+      @dsl = DSL.new(&block)
     end
+    alias :dsl :rules
 
     def build(objects)
-      Mapper.map(objects, &@mappings)
+      mapped = Mapper.map(objects, &@mappings)
+      rows = @dsl.parse(mapped)
+      keys = rows.flat_map(&:keys).uniq.sort
+      CSV.generate do |csv|
+        csv << keys
+        rows.each do |row|
+          csv << keys.map { |key| row[key] }
+        end
+      end
     end
   end
 
@@ -218,7 +205,7 @@ module DJC
       if @capture
         rule_parse(data)
       else
-        data = data[@rule] if @rule && extract
+        data = data[@rule] if data && @rule && extract && data.is_a?(Hash)
         if data.is_a?(Array)
           data.flat_map do |element|
             parse(element, false)

@@ -4,8 +4,7 @@ describe DJC do
 
   describe "DJC#merge" do
 
-    xit "can merge two hashes based on smart rules" do
-
+    it "can merge two hashes based on smart rules" do
       people = { people: [ { employee_id: 0, company_id: 0 }, { employee_id: 1, company_id: 0 }] }
 
       employees = [
@@ -28,9 +27,7 @@ describe DJC do
         b: [ { company: 0, employees: [ { empid: 0, name: "Joe" }, { empid: 1, name: "Sally" } ] },
              { company: 1, employees: [ { empid: 0, name: "Wong"}, { empid: 1, name: "Wright"} ] } ]
       }
-
     end
-
   end
 
   context "DSL parsing" do
@@ -104,43 +101,32 @@ describe DJC do
       end
     end
 
-    it "can parse out nested complex rules one deep" do
-      data = {
-          a: {
-              b: [
-                  { val: "val1",
-                    inner: [
-                        { val: "innerval11" },
-                        { val: "innerval12" }
-                    ]
-                  },
-                  { val: "val2",
-                    inner: [
-                        { val: "innerval21" },
-                        { val: "innerval22" }
-                    ]
-                  }
-              ]
-          }
-      }
+    it "can parse out nested complex rules one deep, with missing values nilled out" do
+      data = { a: { b: [ { val: "val1", inner: [ { val: "innerval11" }, { val: "innerval12" } ] },
+                         { val: "val2", inner: [ { val: "innerval21" }, { val: "innerval22" } ] } ],
+                    c: { d: "value" }
+               }
+             }
 
       dsl = DJC::DSL.new do
         a do
           b do
             +val("val")
+            +missing("missing")
             inner do
               +val("inner")
             end
           end
+          +c.d
         end
       end
 
       dsl.parse(data).sort{ |a,b| a.to_s <=> b.to_s }.should == [
-          { "val" => "val1", "inner" => "innerval11" },
-          { "val" => "val1", "inner" => "innerval12" },
+          { "val" => "val1", "inner" => "innerval11", "missing" => nil, "a_c_d" => "value" },
+          { "val" => "val1", "inner" => "innerval12", "missing" => nil, "a_c_d" => "value" },
 
-          { "val" => "val2", "inner" => "innerval21" },
-          { "val" => "val2", "inner" => "innerval22" }
+          { "val" => "val2", "inner" => "innerval21", "missing" => nil, "a_c_d" => "value" },
+          { "val" => "val2", "inner" => "innerval22", "missing" => nil, "a_c_d" => "value" }
       ].sort { |a,b| a.to_s <=> b.to_s }
   end
 
@@ -179,12 +165,8 @@ describe DJC do
             end
             complex_a do
               +val("val")
-              cplxb do
-                cplxc do
-                  cplxd do
-                    +val("innerval")
-                  end
-                end
+              cplxb.cplxc.cplxd do
+                +val("innerval")
               end
             end
           end
@@ -217,11 +199,9 @@ describe DJC do
           { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => "val211" }
       ].sort { |a,b| a.to_s <=> b.to_s }
     end
-
-
   end
 
-  it "can be a DSL that doesn't suck" do
+  it "can be a readable DSL that easily makes sense" do
     json = <<-JSON
 {
   "customers" : [
@@ -271,7 +251,7 @@ describe DJC do
 
   end
 
-  xit "can build a complete CSV from a JSON structure" do
+  xit "can build a complete CSV from a JSON strings and merge rules" do
 
     teachers = <<-JSON
 [
@@ -294,8 +274,8 @@ describe DJC do
     {"id": 200,
      "name": "Other Company DotCom",
      "employees": [
-       {"id":1,"name":{"first":"Dame","last":"Edna"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
-       {"id":2,"name":{"first":"Senor","last":"Whoozit"}, "jobtitle":"Senior Engineer","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1}
+       {"id":11,"name":{"first":"Dame","last":"Edna"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
+       {"id":12,"name":{"first":"Senor","last":"Whoozit"}, "jobtitle":"Senior Engineer","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":11}
     ]}
   ],
   "seminars" : [
@@ -329,32 +309,38 @@ describe DJC do
         employee <=> id
         company <=> --id
 
-        classes.seminars.attendees.company & classes.customers
+        classes.seminars.attendees & classes.customers % corp
         company <=> id
 
-        classes.customers.employees & classes.customers.employees % boss
+        classes.customers.employees & classes.customers.employees % manager
         boss <=> id
       end
 
-      rules do
+      dsl do
         classes.seminars do
-                   "seminar_id"         < code[/.*?-(\d+).*/]
-                   "teacher_first_name" < instructor.name[/(\w+) \w+/]
-                   "teacher_last_name"  < "instructor.name"[/\w+ (\w+)/]
+          +code("seminar_id")
+          +instructor.name("teacher")
 
           attendees do
-            name { "attendee"           < "first,last".join(' ') }
-                   "company_name"       < company.name
-                   "title"              < "jobtitle"
-                   "boss"               < "boss.name.first,last".do { |first, last| "#{last}, #{first}" }
+            corp do
+              +name("company")
+              employees do
+                +jobtitle("title")
+                +name.first("attendee")
+                manager do
+                  +name.first("boss")
+                end
+              end
+            end
+
           end
         end
       end
     end
 
-    pp csv
+    puts csv
 
-    csv.should == <<-CSV
+    csv.to_s.should == <<-CSV
 seminar_id,teacher,attendee,company,title,boss
 1003,McTeacherson,Joe Schmoe,Company Inc,CEO,N/A
 1003,McTeacherson,Dame Edna,Other Company DotCom,CEO,N/A
