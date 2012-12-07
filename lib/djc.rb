@@ -171,6 +171,7 @@ module DJC
         ctx[:dsl] = self
         instance_eval(&block)
       end if block
+      self
     end
     def -@()
       @finder = true
@@ -205,13 +206,41 @@ module DJC
       self
     end
 
-    def join(delimiter = " ")
+    def join(delimiter = $,)
       compose { |*values| [*values].join(delimiter) }
       self
     end
+
+    def sum(inital = 0.0)
+      compose { |*values| values.map(&:to_f).inject(inital, :+) if values }
+      self
+    end
+
+    def avg(initial = 0.0)
+      compose { |*values| (values.map(&:to_f).inject(initial, :+) / values.size) if values }
+      self
+    end
+
+    def sort(&sorter)
+      compose { |*sort| sort.compact.sort(&sorter) }
+      self
+    end
+
+    def uniq
+      compose { |*values| values.uniq }
+      self
+    end
+
     def capture(regex, *captures)
       compose do |value|
-        regex.match(value.to_s).try?.to_a[1..-1].values_at(*captures).sequester
+        if (match = regex.match(value.to_s))
+          if captures.empty?
+            match.captures
+          else
+            symbols = captures.any? { |i| i.is_a?(String) || i.is_a?(Symbol) }
+            symbols ? captures.map { |name| match[name] } : match.captures.values_at(*captures)
+          end.sequester
+        end
       end
       self
     end
