@@ -374,13 +374,13 @@ describe DJC do
       end
 
       dsl.parse(data).should == [{
-          sum: 6.3,
-          avg: 2.0,
-          uniq: [1,2,3,4],
-          join: "12345",
-          count: 5,
-          capture: ["abc", "123"],
-          all: ".12345abcxyz"
+          "sum"     => 6.3,
+          "avg"     => 2.0,
+          "uniq"    => [1,2,3,4],
+          "join"    => "12345",
+          "count"   => 5,
+          "capture" => ["abc", "123"],
+          "all"     => ".12345abcxyz"
       }]
     end
 
@@ -399,25 +399,38 @@ describe DJC do
         +array_field.*
       end
 
-      p dsl
-
       dsl.parse(data).should == [{
         "hash_field_a"   => "a",
         "hash_field_b"   => "b",
         "hash_field_c"   => "c",
-        "array_field[0]" => 11,
-        "array_field[1]" => 12,
-        "array_field[2]" => 13
+        "array_field_0" => 11,
+        "array_field_1" => 12,
+        "array_field_2" => 13
+      }]
+    end
+
+    it "can return the matched parts of a find" do
+      data = {
+          foo_a: "fooa",
+          foo_b: "foob",
+          bar_a: "bara",
+          zzz: {
+              scary: "scawy"
+          }
+      }
+
+      dsl = DJC::DSL.new do
+        +find(/foo_([\w])/).* % proc { |key| "field[#{key}]" }
+      end
+
+      dsl.parse(data).should == [{
+          "field[a]" => "fooa",
+          "field[b]" => "foob",
       }]
 
     end
 
-
     xit "can have reusable sub dsls" do
-
-    end
-
-    xit "can return the matched parts of a find" do
 
     end
 

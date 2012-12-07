@@ -162,6 +162,8 @@ module DJC
         end
       end
     end
+
+    def emit_name(name = nil) @name.is_a?(Proc) ? @name.call(name) : "#@name#{ "_#{name}" if name }" end
     def __djc_build_name(rule = nil) @name ? "#{@name}_#{rule}" : rule end
 
     def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc_build_name(rule), &block)
@@ -314,11 +316,11 @@ module DJC
         values = @rule.to_s.walk(data)
 
         row = if @splatter && values.is_a?(Hash)
-          values.each.with_object({}) { |(k, v), r| r["#{@name}_#{k}"] = v }
+          values.each.with_object({}) { |(k, v), r| r[emit_name(k)] = v }
         elsif @splatter && values.is_a?(Array)
-          values.each.with_index.with_object({}) { |(v, i), r| r["#{@name}[#{i}]"] = v }
+          values.each.with_index.with_object({}) { |(v, i), r| r[emit_name(i)] = v }
         else
-          { @name => values }
+          { emit_name => values }
         end
 
         [ @composer.empty? ? row : row.each.with_object({}) { |(k,v), r| r[k] = @composer.inject(v) { |m,c| c.call(*m) } } ]
