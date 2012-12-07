@@ -31,7 +31,7 @@ module DJC
           else
             ctx[:mappings] << Mapping.new(self, other)
           end
-          p ctx[:mappings]
+#          p ctx[:mappings]
           self
         end
         def +(other) self & other end
@@ -114,7 +114,8 @@ module DJC
     def map(&block) @mappings = block end
     alias :mappings :map
 
-    def rules(&block)
+    def rules(*headers, &block)
+      @headers = headers
       @dsl = DSL.new(&block)
     end
     alias :dsl :rules
@@ -122,7 +123,7 @@ module DJC
     def build(objects)
       mapped = Mapper.map(objects, &@mappings)
       rows = @dsl.parse(mapped)
-      keys = rows.flat_map(&:keys).uniq.sort
+      keys = @headers || rows.flat_map(&:keys).uniq.sort
       CSV.generate do |csv|
         csv << keys
         rows.each do |row|
@@ -165,7 +166,7 @@ module DJC
       @name ? "#{@name}_#{rule}" : rule
     end
     def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc__name(rule), &block)
-      @rule, @parent, @name, @capture, @finder, @nodes = rule, parent, name, false, false, []
+      @rule, @parent, @name, @capture, @finder, @nodes, @composer = rule, parent, name, false, false, [], []
       ctx(:djc_dsl_def) do
         ctx[:dsl] = self
         instance_eval(&block)
@@ -194,10 +195,26 @@ module DJC
 
     def find(rule, &block)
       rule = rule.inspect if rule.is_a?(Regexp)
-      -method_missing(rule,&block)
+      -method_missing(rule, &block)
     end
     alias_method :match, :find
     alias_method :with, :find
+
+    def compose(&block)
+      @composer << block
+      self
+    end
+
+    def join(delimiter = " ")
+      compose { |*values| [*values].join(delimiter) }
+      self
+    end
+    def capture(regex, *captures)
+      compose do |value|
+        regex.match(value.to_s).try?.to_a[1..-1].values_at(*captures).sequester
+      end
+      self
+    end
 
     def method_missing(name, *args, &block)
       dsl = DSL.new(name, self, *args, &block)
@@ -211,7 +228,11 @@ module DJC
           rule_parse(element)
         end
       else
-        [ { @name => @rule.to_s.walk(data) } ]
+        if @composer.empty?
+          [ { @name => @rule.to_s.walk(data) } ]
+        else
+          [ { @name => @composer.inject(@rule.to_s.walk(data)){ |memo, composer| composer.call(*memo) } } ]
+        end
       end
     end
 

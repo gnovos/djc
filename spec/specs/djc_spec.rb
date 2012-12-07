@@ -352,7 +352,7 @@ describe DJC do
 
   end
 
-  xit "can build a complete CSV from a JSON strings and merge rules" do
+  it "can build a complete CSV from a JSON strings and merge rules" do
 
     teachers = <<-JSON
 [
@@ -417,23 +417,29 @@ describe DJC do
         boss <=> id
       end
 
-      dsl do
+      dsl('seminar_id', 'teacher', 'attendee', 'company', 'title', 'boss') do
         classes.seminars do
-          +code("seminar_id")
-          +instructor.name("teacher")
+          +code("seminar_id").capture(/^(\w+)(-)(\d+)/, 0, 2).join(":")
+          +instructor.name("teacher").capture(/([^\s]*)$/, 0)
 
           attendees do
             corp do
               +name("company")
               employees do
                 +jobtitle("title")
-                +name.first("attendee")
+                name do
+                  +with("first,last").join(" ") > "attendee"
+                end
+
                 manager do
-                  +name.first("boss")
+                  name do
+                    +with("first,last").compose { |first, last|
+                      first ? "#{first} #{last}" : "N/A"
+                    } > 'boss'
+                  end
                 end
               end
             end
-
           end
         end
       end
@@ -443,11 +449,11 @@ describe DJC do
 
     csv.to_s.should == <<-CSV
 seminar_id,teacher,attendee,company,title,boss
-1003,McTeacherson,Joe Schmoe,Company Inc,CEO,N/A
-1003,McTeacherson,Dame Edna,Other Company DotCom,CEO,N/A
-1003,McTeacherson,Dame Edna,Other Company DotCom,Senior Engineer,Dame Edna
-1004,Instructinator,Jane Jabang,Company Inc,Internal Affairs Chief,Joe Schmoe
-1004,Instructinator,Meebook Garblong,Company Inc,Alien Visitor Hospitality Officer,Joe Schmoe
+AAP:1003,McTeacherson,Joe Schmoe,Company Inc,CEO,N/A
+AAP:1003,McTeacherson,Dame Edna,Other Company DotCom,CEO,N/A
+AAP:1003,McTeacherson,Dame Edna,Other Company DotCom,Senior Engineer,Dame Edna
+AAP:1004,Instructinator,Jane Jabang,Company Inc,Internal Affairs Chief,Joe Schmoe
+AAP:1004,Instructinator,Meebook Garblong,Company Inc,Alien Visitor Hospitality Officer,Joe Schmoe
     CSV
 
   end
