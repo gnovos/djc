@@ -1,12 +1,16 @@
-djconvolvs
-==========
+djc
+===
 
-JSON to CSV mapping DSL
+Finally, a *D*SL that converts *J*SON into *C*SV
 
-DJ
-CSV
- OL
- N
+---
 
-==========
+    DJC.build(objects/files) do
+        dsl(headers) do
+          field do
+            +captured_field
+          end
+        end
+    end
+
 

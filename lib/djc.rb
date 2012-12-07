@@ -134,7 +134,7 @@ module DJC
   end
 
   def self.build(objects, &block)
-    parsed = objects.inject({}) do |memo, (key, val)|
+    parsed = [*objects].inject({}) do |memo, (key, val)|
       memo[key.sym] = if val.is_a?(String)
                         val = File.read(val) if File.exists?(val)
                         JSON.parse(val, max_nesting: false,
