@@ -2,7 +2,7 @@ require '../spec_helper'
 
 describe DJC do
 
-  describe "DJC#merge" do
+  context "DJC#merge" do
 
     it "can merge two hashes based on smart rules" do
       people = { people: [ { employee_id: 0, company_id: 0 }, { employee_id: 1, company_id: 0 }] }
@@ -14,23 +14,73 @@ describe DJC do
 
       mapped = DJC::Mapper.map(a:people, b:employees) do
         MERGE
-          'a.people' & 'b.employees'
+        'a.people' & 'b.employees'
 
         WHERE
-          'employee_id' <=> 'empid'
-          'company_id' <=> '^.^.company'
+        'employee_id' <=> 'empid'
+        'company_id' <=> '^.^.company'
       end
 
       mapped.should == {
-        a: { people: [ { employee_id: 0, company_id: 0, empid: 0, name: "Joe"   },
-                       { employee_id: 1, company_id: 0, empid: 1, name: "Sally" }] },
-        b: [ { company: 0, employees: [ { empid: 0, name: "Joe" }, { empid: 1, name: "Sally" } ] },
-             { company: 1, employees: [ { empid: 0, name: "Wong"}, { empid: 1, name: "Wright"} ] } ]
+          a: { people: [ { employee_id: 0, company_id: 0, empid: 0, name: "Joe"   },
+                         { employee_id: 1, company_id: 0, empid: 1, name: "Sally" }] },
+          b: [ { company: 0, employees: [ { empid: 0, name: "Joe" }, { empid: 1, name: "Sally" } ] },
+               { company: 1, employees: [ { empid: 0, name: "Wong"}, { empid: 1, name: "Wright"} ] } ]
       }
     end
   end
 
   context "DSL parsing" do
+
+    it "can parse a JSON document based on a DSL" do
+      json = <<-JSON
+{
+  "customers" : [
+    {"id": 100,
+     "name": "Company Inc",
+     "employees": [
+       {"id":1,"name":{"first":"Joe","last":"Schmoe"},
+        "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
+       {"id":2,"name":{"first":"Jane","last":"Jabang"},
+        "jobtitle":"Internal Affairs Chief","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1},
+       {"id":3,"name":{"first":"Mebook","last":"Garblong"},
+        "jobtitle":"Alien Visitor Hospitality Officer","address":"123 fake street","date joined":"2001-04-10","boss":1}
+    ]},
+    {"id": 200,
+     "name": "Other Company DotCom",
+     "employees": [
+       {"id":11,"name":{"first":"Dame","last":"Edna"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
+       {"id":12,"name":{"first":"Senor","last":"Whoozit"}, "jobtitle":"Senior Engineer","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1}
+    ]}
+  ]
+}
+      JSON
+
+      dsl = DJC::DSL.new do
+        customers do
+          +name("company_name")
+          employees do
+            +id("employees_id")
+            name do
+              +first("first_name")
+              +last("last_name")
+            end
+            +"date joined|date started" > "joined"
+          end
+        end
+      end
+
+      parsed = dsl.parse(JSON.parse(json))
+
+      parsed.sort{|a,b|a.to_s<=>b.to_s}.should == [
+          {"company_name" => "Company Inc",          "employees_id" => 1,  "first_name" => "Joe",    "last_name" => "Schmoe",   "joined" => "2001-01-10"},
+          {"company_name" => "Company Inc",          "employees_id" => 2,  "first_name" => "Jane",   "last_name" => "Jabang",   "joined" => "2001-03-10"},
+          {"company_name" => "Company Inc",          "employees_id" => 3,  "first_name" => "Mebook", "last_name" => "Garblong", "joined" => "2001-04-10"},
+          {"company_name" => "Other Company DotCom", "employees_id" => 11, "first_name" => "Dame",   "last_name" => "Edna",     "joined" => "2001-01-10"},
+          {"company_name" => "Other Company DotCom", "employees_id" => 12, "first_name" => "Senor",  "last_name" => "Whoozit",  "joined" => "2001-03-10"}
+      ].sort{|a,b|a.to_s<=>b.to_s}
+
+    end
 
     it "can parse out a single rule" do
       data = { search_key: "found", other_key:"not correct"}
@@ -132,9 +182,9 @@ describe DJC do
     it "can parse out nested complex rules one deep, with missing values nilled out" do
       data = { a: { b: [ { val: "val1", inner: [ { val: "innerval11" }, { val: "innerval12" } ] },
                          { val: "val2", inner: [ { val: "innerval21" }, { val: "innerval22" } ] } ],
-                    c: { d: "value" }
-               }
-             }
+                    c: { d: "value", e: "e", f: "f", g: "g" }
+      }
+      }
 
       dsl = DJC::DSL.new do
         a do
@@ -156,33 +206,33 @@ describe DJC do
           { "val" => "val2", "inner" => "innerval21", "missing" => nil, "a_c_d" => "value" },
           { "val" => "val2", "inner" => "innerval22", "missing" => nil, "a_c_d" => "value" }
       ].sort { |a,b| a.to_s <=> b.to_s }
-  end
+    end
 
-  it "can parse out arbitrarily complex rules" do
+    it "can parse out arbitrarily complex rules" do
       data = { depth_0: {
-                depth_1_found: "found 1",
-                depth_1: {
-                  depth_2: [
-                      { depth_3_found: "found 3a", other: "wrong" },
-                      { depth_3_found: "found 3b", other: "wrong" },
-                      { depth_3_found: "found 3c", other: "wrong" },
-                  ],
-                  other: "wrong",
-                  complex_a: [
-                    { val: "val1",
-                      cplxb: [
+          depth_1_found: "found 1",
+          depth_1: {
+              depth_2: [
+                  { depth_3_found: "found 3a", other: "wrong" },
+                  { depth_3_found: "found 3b", other: "wrong" },
+                  { depth_3_found: "found 3c", other: "wrong" },
+              ],
+              other: "wrong",
+              complex_a: [
+                  { val: "val1",
+                    cplxb: [
                         { cplxc: { cplxd: [ { val: "val111" }, { val: "val112" } ] } },
                         { cplxc: { cplxd: [ { val: "val121" }, { val: "val122" } ] } }, ]
-                    },
-                    { val: "val2",
-                      cplxb: [
-                          { cplxc: { cplxd: [ { val: "val211" }, { val: "val211" } ] } } ]
-                    }
-                  ]
-                },
-                other: "wrong"
-              },
-              other: "wrong"  }
+                  },
+                  { val: "val2",
+                    cplxb: [
+                        { cplxc: { cplxd: [ { val: "val211" }, { val: "val211" } ] } } ]
+                  }
+              ]
+          },
+          other: "wrong"
+      },
+               other: "wrong"  }
 
       dsl = DJC::DSL.new do
         depth_0 do
@@ -275,94 +325,125 @@ describe DJC do
       end
 
       dsl.parse(data).sort{ |a,b| a.to_s <=> b.to_s }.should == [
-        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => "val111"},
-        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => "val112"},
-        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3a", "val" => "val2", "innerval" => "val211"},
-        { "d1" => "found 1", "d3" => "found 3a", "val" => "val2", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3a", "val" => nil,    "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => "val111"},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => "val112"},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => "val1", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => "val2", "innerval" => "val211"},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => "val2", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3a", "val" => nil,    "innerval" => nil},
 
-        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => "val111"},
-        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => "val112"},
-        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3b", "val" => "val2", "innerval" => "val211"},
-        { "d1" => "found 1", "d3" => "found 3b", "val" => "val2", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3b", "val" => nil,    "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => "val111"},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => "val112"},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => "val1", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => "val2", "innerval" => "val211"},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => "val2", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3b", "val" => nil,    "innerval" => nil},
 
-        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => "val111"},
-        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => "val112"},
-        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => "val211"},
-        { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => nil},
-        { "d1" => "found 1", "d3" => "found 3c", "val" => nil,    "innerval" => nil}
+          { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => "val111"},
+          { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => "val112"},
+          { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3c", "val" => "val1", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => "val211"},
+          { "d1" => "found 1", "d3" => "found 3c", "val" => "val2", "innerval" => nil},
+          { "d1" => "found 1", "d3" => "found 3c", "val" => nil,    "innerval" => nil}
       ].sort { |a,b| a.to_s <=> b.to_s }
     end
-  end
 
-  it "can be a readable DSL that easily makes sense" do
-    json = <<-JSON
-{
-  "customers" : [
-    {"id": 100,
-     "name": "Company Inc",
-     "employees": [
-       {"id":1,"name":{"first":"Joe","last":"Schmoe"},
-        "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
-       {"id":2,"name":{"first":"Jane","last":"Jabang"},
-        "jobtitle":"Internal Affairs Chief","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1},
-       {"id":3,"name":{"first":"Mebook","last":"Garblong"},
-        "jobtitle":"Alien Visitor Hospitality Officer","address":"123 fake street","date joined":"2001-04-10","boss":1}
-    ]},
-    {"id": 200,
-     "name": "Other Company DotCom",
-     "employees": [
-       {"id":11,"name":{"first":"Dame","last":"Edna"},     "jobtitle":"CEO","address":"123 fake street","date joined":"2001-01-10","boss":null},
-       {"id":12,"name":{"first":"Senor","last":"Whoozit"}, "jobtitle":"Senior Engineer","address1":"123 fake street","address2":"Faketown, USA","date started":"2001-03-10","boss":1}
-    ]}
-  ]
-}
-    JSON
+    it "can compose new values based on one or more fields" do
+      data = {
+          sum: [1, 2, 3.3],
+          avg: [1, 2, 3],
+          uniq: [1, 2, 1, 3, 1, 4],
+          join: [1, 2, 3, 4, 5],
+          count: [1, 2, 3, 4, 5],
+          capture: "abc 123 xyz"
+      }
 
-    dsl = DJC::DSL.new do
-      customers do
-        +name("company_name")
-        employees do
-          +id("employees_id")
-          name do
-            +first("first_name")
-            +last("last_name")
-          end
-          +"date joined|date started" > "joined"
-        end
+      dsl = DJC::DSL.new do
+        +sum.sum
+        +avg.avg
+        +uniq.uniq
+        +join.join
+        +count.count
+        +capture.capture(/(\w+) (\d+)/, 1, 2)
+        +with("sum, avg, uniq, join, count, capture").compose { |*values|
+          values.flatten.map(&:to_s).join().split('').sort.uniq.join.strip
+        } % :all
       end
+
+      dsl.parse(data).should == [{
+          sum: 6.3,
+          avg: 2.0,
+          uniq: [1,2,3,4],
+          join: "12345",
+          count: 5,
+          capture: ["abc", "123"],
+          all: ".12345abcxyz"
+      }]
     end
 
-    parsed = dsl.parse(JSON.parse(json))
+    it "can include all the fields under a block" do
+      data = {
+          hash_field: {
+              a: "a",
+              b: "b",
+              c: "c"
+          },
+          array_field: [ 11, 12, 13 ]
+      }
 
-    parsed.sort{|a,b|a.to_s<=>b.to_s}.should == [
-        {"company_name" => "Company Inc",          "employees_id" => 1,  "first_name" => "Joe",    "last_name" => "Schmoe",   "joined" => "2001-01-10"},
-        {"company_name" => "Company Inc",          "employees_id" => 2,  "first_name" => "Jane",   "last_name" => "Jabang",   "joined" => "2001-03-10"},
-        {"company_name" => "Company Inc",          "employees_id" => 3,  "first_name" => "Mebook", "last_name" => "Garblong", "joined" => "2001-04-10"},
-        {"company_name" => "Other Company DotCom", "employees_id" => 11, "first_name" => "Dame",   "last_name" => "Edna",     "joined" => "2001-01-10"},
-        {"company_name" => "Other Company DotCom", "employees_id" => 12, "first_name" => "Senor",  "last_name" => "Whoozit",  "joined" => "2001-03-10"}
-    ].sort{|a,b|a.to_s<=>b.to_s}
+      dsl = DJC::DSL.new do
+        +hash_field.*
+        +array_field.*
+      end
+
+      p dsl
+
+      dsl.parse(data).should == [{
+        "hash_field_a"   => "a",
+        "hash_field_b"   => "b",
+        "hash_field_c"   => "c",
+        "array_field[0]" => 11,
+        "array_field[1]" => 12,
+        "array_field[2]" => 13
+      }]
+
+    end
+
+
+    xit "can have reusable sub dsls" do
+
+    end
+
+    xit "can return the matched parts of a find" do
+
+    end
 
   end
 
-  it "can build a complete CSV from a JSON strings and merge rules" do
+  context "DJC#build" do
 
-    teachers = <<-JSON
+    xit "can handle files, JSON strings and JSON objects" do
+
+    end
+
+    xit "can define headers with non-unique fields" do
+
+    end
+
+    it "can build a complete CSV from a JSON strings and merge rules" do
+
+      teachers = <<-JSON
 [
   {"id":1, "name":"Albert Einstein"},
   {"id":2, "name":"Teacher McTeacherson"},
   {"id":3, "name":"Instructinator"}
 ]
-    JSON
+      JSON
 
-    sales = <<-JSON
+      sales = <<-JSON
 {
   "customers" : [
     {"id": 100,
@@ -399,43 +480,44 @@ describe DJC do
     }
   ]
 }
-    JSON
+      JSON
 
-    csv = DJC.build(instructors:teachers, classes:sales) do
-      mappings do
-        classes.seminars & instructors % instructor
-        instructor <=> id
+      csv = DJC.build(instructors:teachers, classes:sales) do
+        mappings do
+          classes.seminars & instructors % instructor
+          instructor <=> id
 
-        classes.seminars.attendees & classes.customers.employees
-        employee <=> id
-        company <=> --id
+          classes.seminars.attendees & classes.customers.employees
+          employee <=> id
+          company <=> --id
 
-        classes.seminars.attendees & classes.customers % corp
-        company <=> id
+          classes.seminars.attendees & classes.customers % corp
+          company <=> id
 
-        classes.customers.employees & classes.customers.employees % manager
-        boss <=> id
-      end
+          classes.customers.employees & classes.customers.employees % manager
+          boss <=> id
+        end
 
-      dsl('seminar_id', 'teacher', 'attendee', 'company', 'title', 'boss') do
-        classes.seminars do
-          +code("seminar_id").capture(/^(\w+)(-)(\d+)/, 0, 2).join(":")
-          +instructor.name("teacher").capture(/(?<teacher_name>[^\s]*)$/, :teacher_name)
+        dsl('seminar_id', 'teacher', 'attendee', 'company', 'title', 'boss') do
+          classes.seminars do
+            +code("seminar_id").capture(/^(\w+)(-)(\d+)/, 1, 3).join(":")
+            +instructor.name("teacher").capture(/(?<teacher_name>[^\s]*)$/, :teacher_name)
 
-          attendees do
-            corp do
-              +name("company")
-              employees do
-                +jobtitle("title")
-                name do
-                  +with("first,last").join(" ") > "attendee"
-                end
-
-                manager do
+            attendees do
+              corp do
+                +name("company")
+                employees do
+                  +jobtitle("title")
                   name do
-                    +with("first,last").compose { |first, last|
-                      first ? "#{first} #{last}" : "N/A"
-                    } > 'boss'
+                    +with("first,last").join(" ") > "attendee"
+                  end
+
+                  manager do
+                    name do
+                      +with("first,last").compose { |first, last|
+                        first ? "#{first} #{last}" : "N/A"
+                      } > 'boss'
+                    end
                   end
                 end
               end
@@ -443,9 +525,8 @@ describe DJC do
           end
         end
       end
-    end
 
-    csv.to_s.should == <<-CSV
+      csv.to_s.should == <<-CSV
 seminar_id,teacher,attendee,company,title,boss
 AAP:1003,McTeacherson,Joe Schmoe,Company Inc,CEO,N/A
 AAP:1003,McTeacherson,Jane Jabang,Company Inc,Internal Affairs Chief,Joe Schmoe
@@ -460,7 +541,7 @@ AAP:1004,Instructinator,Mebook Garblong,Company Inc,Alien Visitor Hospitality Of
 AAP:1004,Instructinator,Joe Schmoe,Company Inc,CEO,N/A
 AAP:1004,Instructinator,Jane Jabang,Company Inc,Internal Affairs Chief,Joe Schmoe
 AAP:1004,Instructinator,Mebook Garblong,Company Inc,Alien Visitor Hospitality Officer,Joe Schmoe
-    CSV
+      CSV
 
 #TODO check/fix this
 #xxx
@@ -475,7 +556,10 @@ AAP:1004,Instructinator,Mebook Garblong,Company Inc,Alien Visitor Hospitality Of
 #AAP:1004,Instructinator,Meebook Garblong,Company Inc,Alien Visitor Hospitality Officer,Joe Schmoe
 #    CSV
 #
+    end
+
   end
+
 
 
 end

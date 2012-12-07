@@ -155,25 +155,24 @@ module DJC
     class ::String
       ctx(:djc_dsl_def) do
         def +@()
-          +ctx[:dsl].method_missing(self.to_sym)
+          +ctx[:dsl].__djc_dsl(self.to_sym)
         end
-        def -@()
+        def ~@()
           ctx[:dsl].find(self)
         end
       end
     end
-    def __djc__name(rule = nil)
-      @name ? "#{@name}_#{rule}" : rule
-    end
-    def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc__name(rule), &block)
-      @rule, @parent, @name, @capture, @finder, @nodes, @composer = rule, parent, name, false, false, [], []
+    def __djc_build_name(rule = nil) @name ? "#{@name}_#{rule}" : rule end
+
+    def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc_build_name(rule), &block)
+      @rule, @parent, @name, @capture, @finder, @nodes, @composer, @splatter = rule, parent, name, false, false, [], [], false
       ctx(:djc_dsl_def) do
         ctx[:dsl] = self
         instance_eval(&block)
       end if block
       self
     end
-    def -@()
+    def ~@()
       @finder = true
       self
     end
@@ -185,9 +184,12 @@ module DJC
       @name = other
       self
     end
+    alias_method :%, :>
+
     def to_str() to_s end
     def to_s(depth = 0)
-      str = @capture ? "+" : ""
+      str = "DJC:"
+      str += @capture ? "+" : ""
       str += (@rule || "ROOT").to_s
       str += "(#@name)" if @name
       str += " {\n#{@nodes.map {|n| ("  " * (depth + 1)) + n.to_s(depth + 1)}.join("\n") }\n#{"  " * depth}}" unless @nodes.empty?
@@ -196,59 +198,111 @@ module DJC
 
     def find(rule, &block)
       rule = rule.inspect if rule.is_a?(Regexp)
-      -method_missing(rule, &block)
+      ~__djc_dsl(rule, &block)
     end
     alias_method :match, :find
     alias_method :with, :find
+    alias_method :field, :find
 
-    def compose(&block)
-      @composer << block
-      self
-    end
-
-    def join(delimiter = $,)
-      compose { |*values| [*values].join(delimiter) }
-      self
-    end
-
-    def sum(inital = 0.0)
-      compose { |*values| values.map(&:to_f).inject(inital, :+) if values }
-      self
-    end
-
-    def avg(initial = 0.0)
-      compose { |*values| (values.map(&:to_f).inject(initial, :+) / values.size) if values }
-      self
-    end
-
-    def sort(&sorter)
-      compose { |*sort| sort.compact.sort(&sorter) }
-      self
-    end
-
-    def uniq
-      compose { |*values| values.uniq }
-      self
-    end
-
-    def capture(regex, *captures)
-      compose do |value|
-        if (match = regex.match(value.to_s))
-          if captures.empty?
-            match.captures
-          else
-            symbols = captures.any? { |i| i.is_a?(String) || i.is_a?(Symbol) }
-            symbols ? captures.map { |name| match[name] } : match.captures.values_at(*captures)
-          end.sequester
-        end
+    def compose(*args, &block)
+      if ctx[:dsl] == self
+        __djc_dsl(:compose, *args, &block)
+      else
+        @composer << block
+        self
       end
+    end
+
+    def join(delimiter=$,, &block)
+      if ctx[:dsl] == self
+        args = delimiter != $, ? [delimiter] : []
+        __djc_dsl(:join, *args, &block)
+      else
+        compose { |*values| [*values].join(delimiter) }
+        self
+      end
+    end
+
+    def sum(initial = 0.0, op = :+, &block)
+      if ctx[:dsl] == self
+        args = initial != 0.0 ? [initial] : []
+        __djc_dsl(:sum, *args, &block)
+      else
+        compose { |*values| values.map(&:to_f).inject(initial, block ? block : op) if values }
+        self
+      end
+    end
+
+    def avg(*args, &block)
+      if ctx[:dsl] == self
+        __djc_dsl(:avg, *args, &block)
+      else
+        compose { |*values| (values.map(&:to_f).inject(0.0, :+) / values.size) if values }
+        self
+      end
+    end
+
+    def sort(*args, &block)
+      if ctx[:dsl] == self
+        __djc_dsl(:sort, *args, &block)
+      else
+        compose { |*sort| sort.compact.sort(&block) }
+        self
+      end
+    end
+
+    def uniq(*args, &block)
+      if ctx[:dsl] == self
+        __djc_dsl(:uniq, *args, &block)
+      else
+        compose { |*values| values.uniq }
+        self
+      end
+    end
+
+    def count(compact = false, &block)
+      if ctx[:dsl] == self
+        args = compact ? [compact] : []
+        __djc_dsl(:count, *args, &block)
+      else
+        compose { |*values| compact ? values.compact.size : values.size }
+        self
+      end
+    end
+
+    def *(*)
+      @splatter = true
       self
     end
 
-    def method_missing(name, *args, &block)
+    def capture(regex = nil, *captures, &block)
+      if ctx[:dsl] == self
+        args = [regex, *captures].compact
+        __djc_dsl(:capture, *args, &block)
+      else
+        compose do |value|
+          if (match = regex.match(value.to_s))
+            if captures.empty?
+              block ? block.call(match) : match.captures
+            else
+              symbols = captures.any? { |i| i.is_a?(String) || i.is_a?(Symbol) }
+              captured = symbols ? captures.map { |name| match[name] } : match.to_a.values_at(*captures)
+              block ? block.call(*captured) : captured
+            end.sequester
+          end
+        end
+        self
+      end
+    end
+
+    def __djc_dsl(name, *args, &block)
       dsl = DSL.new(name, self, *args, &block)
       @nodes << dsl
       dsl
+    end
+
+    def method_missing(name, *args, &block)
+      __djc_dsl(name, *args, &block)
     end
 
     def rule_parse(data)
@@ -257,11 +311,17 @@ module DJC
           rule_parse(element)
         end
       else
-        if @composer.empty?
-          [ { @name => @rule.to_s.walk(data) } ]
+        values = @rule.to_s.walk(data)
+
+        row = if @splatter && values.is_a?(Hash)
+          values.each.with_object({}) { |(k, v), r| r["#{@name}_#{k}"] = v }
+        elsif @splatter && values.is_a?(Array)
+          values.each.with_index.with_object({}) { |(v, i), r| r["#{@name}[#{i}]"] = v }
         else
-          [ { @name => @composer.inject(@rule.to_s.walk(data)){ |memo, composer| composer.call(*memo) } } ]
+          { @name => values }
         end
+
+        [ @composer.empty? ? row : row.each.with_object({}) { |(k,v), r| r[k] = @composer.inject(v) { |m,c| c.call(*m) } } ]
       end
     end
 
