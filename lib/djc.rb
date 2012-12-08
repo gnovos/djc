@@ -173,9 +173,10 @@ module DJC
       end
     end
     def __djc_build_name(rule = nil) @name ? "#{@name}_#{rule}" : rule end
+    def __djc_reparent(parent) @parent = parent end
 
     def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc_build_name(rule), &block)
-      @rule, @parent, @name, @capture, @finder, @nodes, @composer, @splatter = rule, parent, name, false, false, [], [], false
+      @rule, @parent, @name, @capture, @finder, @nodes, @composer, @splatter, @partials = rule, parent, name, false, false, [], [], false, {}
       ctx(:djc_dsl_def) do
         ctx[:dsl] = self
         instance_eval(&block)
@@ -188,6 +189,7 @@ module DJC
     end
     def +@()
       @capture = true
+      @rule = @rule.gsub(/^\/([^()]*)\/$/, '/(\1)/') if @finder
       self
     end
     def >(other)
@@ -202,13 +204,13 @@ module DJC
       str += @capture ? "+" : ""
       str += (@rule || "ROOT").to_s
       str += "(#@name)" if @name
+      str += " [#{@partials.keys.join(",")}]" unless @partials.empty?
       str += " {\n#{@nodes.map {|n| ("  " * (depth + 1)) + n.to_s(depth + 1)}.join("\n") }\n#{"  " * depth}}" unless @nodes.empty?
       str
     end
 
     def find(rule, &block)
       rule = rule.inspect if rule.is_a?(Regexp)
-      rule = rule.gsub(/^\/([^()]*)\/$/, '/(\1)/')
       ~__djc_dsl(rule, &block)
     end
     alias_method :match, :find
@@ -306,10 +308,26 @@ module DJC
       end
     end
 
+    def __djc_partial(name)
+      @partials[name] || @parent.__djc_partial(name)
+    end
+
     def __djc_dsl(name, *args, &block)
-      dsl = DSL.new(name, self, *args, &block)
-      @nodes << dsl
-      dsl
+      if name.to_s[0] == '_'
+        if block
+          @partials[name] = block
+          self
+        else
+          dsl = __djc_partial(name).call(*args)
+          dsl.__djc_reparent(self)
+          @nodes << dsl
+          dsl
+        end
+      else
+        dsl = DSL.new(name, self, *args, &block)
+        @nodes << dsl
+        dsl
+      end
     end
 
     def method_missing(name, *args, &block)

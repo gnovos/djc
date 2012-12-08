@@ -132,7 +132,7 @@ describe DJC do
           end,
           DJC::DSL.new do
             a.b do
-              match(/c[023]/) do
+              find(/c[023]/) do
                 +val("val")
               end
             end
@@ -182,9 +182,7 @@ describe DJC do
     it "can parse out nested complex rules one deep, with missing values nilled out" do
       data = { a: { b: [ { val: "val1", inner: [ { val: "innerval11" }, { val: "innerval12" } ] },
                          { val: "val2", inner: [ { val: "innerval21" }, { val: "innerval22" } ] } ],
-                    c: { d: "value", e: "e", f: "f", g: "g" }
-      }
-      }
+                    c: { d: "value", e: "e", f: "f", g: "g" } } }
 
       dsl = DJC::DSL.new do
         a do
@@ -414,26 +412,45 @@ describe DJC do
           foo_a: "fooa",
           foo_b: "foob",
           bar_a: "bara",
+          outer: {
+              inner_a: { val: "in1" },
+              inner_b: { val: "in2" },
+              nomatch: { val: "in3" }
+          }
       }
 
       dsl = DJC::DSL.new do
         +find(/foo_([\w])/) % proc { |key| "field[#{key}]" }
         +find(/foo_([\w])/)
         +find(/foo_[\w]/)
+        outer do
+          find(/inner_/) do
+            +val("val")
+          end
+        end
       end
 
-      dsl.parse(data).should == [{
-          "field[a]" => "fooa",
-          "field[b]" => "foob",
-          "a"        => "fooa",
-          "b"        => "foob",
-          "foo_a"        => "fooa",
-          "foo_b"        => "foob"
-      }]
-
+      dsl.parse(data).should == [
+          { "field[a]" => "fooa",
+            "field[b]" => "foob",
+            "a"        => "fooa",
+            "b"        => "foob",
+            "foo_a"    => "fooa",
+            "foo_b"    => "foob",
+            "val"      => "in1"
+          },
+          { "field[a]" => "fooa",
+            "field[b]" => "foob",
+            "a"        => "fooa",
+            "b"        => "foob",
+            "foo_a"    => "fooa",
+            "foo_b"    => "foob",
+            "val"      => "in2"
+          }
+      ]
     end
 
-    it "can have reusable sub dsls" do
+    it "can have reusable partials" do
       data = {
           employees: [
               { name: { first: "Joe",  last: "Smith" } },
@@ -446,16 +463,18 @@ describe DJC do
           ]
       }
 
-      dsl = DJC::DSL.new do
-        employees do
-          name { +with("first,last").join(" ") % "Employee Name" }
-        end
-        friends {
-          name { +with("first,last").join(" ") % "Friend Name" }
+      compiled = DJC::DSL.new do
+        _name { |kind|
+          name { +with("first,last").join(" ") % kind }
         }
+
+        employees { _name("Employee Name") }
+        friends { _name("Friend Name") }
       end
 
-      dsl.parse(data).should == [
+      p compiled
+
+      compiled.parse(data).should == [
           {"Employee Name"=>"Joe Smith", "Friend Name"=>"Doctor Who"},
           {"Employee Name"=>"Jane Doe",  "Friend Name"=>"Doctor Who"},
           {"Employee Name"=>"Jim Bob",   "Friend Name"=>"Doctor Who"},
