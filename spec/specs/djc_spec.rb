@@ -414,23 +414,26 @@ describe DJC do
           foo_a: "fooa",
           foo_b: "foob",
           bar_a: "bara",
-          zzz: {
-              scary: "scawy"
-          }
       }
 
       dsl = DJC::DSL.new do
-        +find(/foo_([\w])/).* % proc { |key| "field[#{key}]" }
+        +find(/foo_([\w])/) % proc { |key| "field[#{key}]" }
+        +find(/foo_([\w])/)
+        +find(/foo_[\w]/)
       end
 
       dsl.parse(data).should == [{
           "field[a]" => "fooa",
           "field[b]" => "foob",
+          "a"        => "fooa",
+          "b"        => "foob",
+          "foo_a"        => "fooa",
+          "foo_b"        => "foob"
       }]
 
     end
 
-    xit "can have reusable sub dsls" do
+    it "can have reusable sub dsls" do
 
     end
 

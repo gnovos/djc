@@ -163,7 +163,15 @@ module DJC
       end
     end
 
-    def emit_name(name = nil) @name.is_a?(Proc) ? @name.call(name) : "#@name#{ "_#{name}" if name }" end
+    def emit_name(name = nil)
+      if @name.is_a?(Proc)
+        @name.call(name)
+      elsif @finder && name
+        name
+      else
+        "#@name#{ "_#{name}" if name }"
+      end
+    end
     def __djc_build_name(rule = nil) @name ? "#{@name}_#{rule}" : rule end
 
     def initialize(rule = nil, parent = nil, name = parent.attempt(rule).__djc_build_name(rule), &block)
@@ -200,6 +208,7 @@ module DJC
 
     def find(rule, &block)
       rule = rule.inspect if rule.is_a?(Regexp)
+      rule = rule.gsub(/^\/([^()]*)\/$/, '/(\1)/')
       ~__djc_dsl(rule, &block)
     end
     alias_method :match, :find
@@ -315,7 +324,7 @@ module DJC
       else
         values = @rule.to_s.walk(data)
 
-        row = if @splatter && values.is_a?(Hash)
+        row = if (@splatter || @finder) && values.is_a?(Hash)
           values.each.with_object({}) { |(k, v), r| r[emit_name(k)] = v }
         elsif @splatter && values.is_a?(Array)
           values.each.with_index.with_object({}) { |(v, i), r| r[emit_name(i)] = v }
