@@ -434,6 +434,35 @@ describe DJC do
     end
 
     it "can have reusable sub dsls" do
+      data = {
+          employees: [
+              { name: { first: "Joe",  last: "Smith" } },
+              { name: { first: "Jane", last: "Doe"   } },
+              { name: { first: "Jim",  last: "Bob"   } }
+          ],
+          friends: [
+              { name: { first: "Doctor", last: "Who"    } },
+              { name: { first: "Jose",   last: "Cuervo" } },
+          ]
+      }
+
+      dsl = DJC::DSL.new do
+        employees do
+          name { +with("first,last").join(" ") % "Employee Name" }
+        end
+        friends {
+          name { +with("first,last").join(" ") % "Friend Name" }
+        }
+      end
+
+      dsl.parse(data).should == [
+          {"Employee Name"=>"Joe Smith", "Friend Name"=>"Doctor Who"},
+          {"Employee Name"=>"Jane Doe",  "Friend Name"=>"Doctor Who"},
+          {"Employee Name"=>"Jim Bob",   "Friend Name"=>"Doctor Who"},
+          {"Employee Name"=>"Joe Smith", "Friend Name"=>"Jose Cuervo"},
+          {"Employee Name"=>"Jane Doe",  "Friend Name"=>"Jose Cuervo"},
+          {"Employee Name"=>"Jim Bob",   "Friend Name"=>"Jose Cuervo"}
+      ]
 
     end
 
