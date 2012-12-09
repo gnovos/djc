@@ -453,35 +453,37 @@ describe DJC do
     it "can have reusable partials" do
       data = {
           employees: [
-              { name: { first: "Joe",  last: "Smith" } },
-              { name: { first: "Jane", last: "Doe"   } },
-              { name: { first: "Jim",  last: "Bob"   } }
+              { name: { id:1, first: "Joe",  last: "Smith" } },
+              { name: { id:2, first: "Jane", last: "Doe"   } },
+              { name: { id:3, first: "Jim",  last: "Bob"   } }
           ],
           friends: [
-              { name: { first: "Doctor", last: "Who"    } },
-              { name: { first: "Jose",   last: "Cuervo" } },
+              { name: { id:4, first: "Doctor", last: "Who"    } },
+              { name: { id:5, first: "Jose",   last: "Cuervo" } },
           ]
       }
 
       compiled = DJC::DSL.new do
         _name { |kind|
-          name { +with("first,last").join(" ") % kind }
+          name {
+            +id("#{kind.downcase.split.first}_id")
+            +with("first,last").join(" ") % kind
+          }
         }
 
-        employees { _name("Employee Name") }
         friends { _name("Friend Name") }
+        employees { _name("Employee Name") }
       end
 
-      p compiled
+      parsed = compiled.parse(data)
 
-      compiled.parse(data).should == [
-          {"Employee Name"=>"Joe Smith", "Friend Name"=>"Doctor Who"},
-          {"Employee Name"=>"Jane Doe",  "Friend Name"=>"Doctor Who"},
-          {"Employee Name"=>"Jim Bob",   "Friend Name"=>"Doctor Who"},
-          {"Employee Name"=>"Joe Smith", "Friend Name"=>"Jose Cuervo"},
-          {"Employee Name"=>"Jane Doe",  "Friend Name"=>"Jose Cuervo"},
-          {"Employee Name"=>"Jim Bob",   "Friend Name"=>"Jose Cuervo"}
-      ]
+
+      parsed.should == [{"friend_id"=>4, "Friend Name"=>"Doctor Who", "employee_id"=>1, "Employee Name"=>"Joe Smith"},
+                        {"friend_id"=>5, "Friend Name"=>"Jose Cuervo", "employee_id"=>1, "Employee Name"=>"Joe Smith"},
+                        {"friend_id"=>4, "Friend Name"=>"Doctor Who", "employee_id"=>2, "Employee Name"=>"Jane Doe"},
+                        {"friend_id"=>5, "Friend Name"=>"Jose Cuervo", "employee_id"=>2, "Employee Name"=>"Jane Doe"},
+                        {"friend_id"=>4, "Friend Name"=>"Doctor Who", "employee_id"=>3, "Employee Name"=>"Jim Bob"},
+                        {"friend_id"=>5, "Friend Name"=>"Jose Cuervo", "employee_id"=>3, "Employee Name"=>"Jim Bob"}]
 
     end
 

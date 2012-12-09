@@ -318,7 +318,8 @@ module DJC
           @partials[name] = block
           self
         else
-          dsl = __djc_partial(name).call(*args)
+          partial = __djc_partial(name)
+          dsl = instance_exec(*args, &partial)
           dsl.__djc_reparent(self)
           @nodes << dsl
           dsl
